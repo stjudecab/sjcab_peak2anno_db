@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sjcab_peak2anno_db"
+version = "0.1.3"
+description = "Gene-backed peak-to-annotation BED resources for SJ/CAB workflows."
+readme = "README.md"
+requires-python = ">=3.7"
+authors = [
+  { name = "SJ/CAB" }
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3.7",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+
+[project.scripts]
+sjcab-peak2anno-db = "sjcab_peak2anno_db._cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+sjcab_peak2anno_db = [
+  "py.typed",
+  "data/gencode.v31lift37.hg19.gene.bed.withtype",
+  "data/gencode.v31.hg38.gene.bed.withtype",
+  "data/gencode.vM22.mm10.gene.bed.withtype",
+  "data/gencode.vM17.mm9.gene.bed.withtype",
+  "data/gencode.vM39.mm39.gene.bed.withtype",
+  "data/sacCer3.geneNames.bed",
+  "data/blacklists/*",
+  "data/cgi/*_cgi.bed",
+]
+
+[tool.ruff]
+target-version = "py37"
+exclude = [
+  ".mamba-root",
+  "build",
+  "dist",
+]

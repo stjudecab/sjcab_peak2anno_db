@@ -1,0 +1,14 @@
+   100 ce10-blacklist.bed
+    97 ce11-blacklist.bed
+   271 dm3-blacklist.bed
+   182 dm6-blacklist.bed
+  1411 hg18-blacklist.bed
+  1871 hg19-blacklist.bed
+  2375 hg38-blacklist.bed
+  1383 hg38_rDNA-blacklist.bed
+  1383 hg38_rDNA_only-blacklist.bed
+  4874 mm10-blacklist.bed
+  3004 mm39-blacklist.bed
+  3038 mm9-blacklist.bed
+    54 sacCer3-blacklist.bed
+ 20043 total

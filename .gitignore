@@ -1,0 +1,42 @@
+# Python build/test output
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.git.backup-*/
+
+# Local package environments
+.mamba-root/
+.venv/
+venv/
+conda-bld/
+
+# Generated annotation/staging outputs kept out of git.
+/backup/
+/*.run.log
+/download_urls.log
+/order.lst
+/*.gtf
+/*.gtf.gz
+/*.withtype
+/[0-9]*bp.*.bed
+/[0-9]*kb.*.bed
+/*.dedup*.bed
+/m_H3K4me3-AB2-P21.common.bed
+
+# Keep only package-declared data under src.
+/src/sjcab_peak2anno_db/data/*
+!/src/sjcab_peak2anno_db/data/blacklists/
+!/src/sjcab_peak2anno_db/data/blacklists/**
+!/src/sjcab_peak2anno_db/data/cgi/
+/src/sjcab_peak2anno_db/data/cgi/*
+!/src/sjcab_peak2anno_db/data/cgi/*_cgi.bed
+!/src/sjcab_peak2anno_db/data/gencode.v31lift37.hg19.gene.bed.withtype
+!/src/sjcab_peak2anno_db/data/gencode.v31.hg38.gene.bed.withtype
+!/src/sjcab_peak2anno_db/data/gencode.vM22.mm10.gene.bed.withtype
+!/src/sjcab_peak2anno_db/data/gencode.vM17.mm9.gene.bed.withtype
+!/src/sjcab_peak2anno_db/data/gencode.vM39.mm39.gene.bed.withtype
+!/src/sjcab_peak2anno_db/data/sacCer3.geneNames.bed

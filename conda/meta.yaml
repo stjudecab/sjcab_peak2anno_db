@@ -1,0 +1,33 @@
+{% set name = "sjcab_peak2anno_db" %}
+{% set version = "0.1.3" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  path: ..
+
+build:
+  number: 0
+  noarch: python
+  script: {{ PYTHON }} -m pip install . --no-deps --no-build-isolation -vv
+
+requirements:
+  host:
+    - python >=3.7
+    - pip
+    - setuptools >=61
+    - wheel
+  run:
+    - python >=3.7
+
+test:
+  imports:
+    - sjcab_peak2anno_db
+  commands:
+    - sjcab-peak2anno-db list
+
+about:
+  summary: Gene-backed peak-to-annotation BED resources for SJ/CAB workflows.
+  license: MIT

@@ -1,0 +1,32 @@
+include src/sjcab_peak2anno_db/py.typed
+recursive-exclude src/sjcab_peak2anno_db/data *
+include src/sjcab_peak2anno_db/data/sacCer3.geneNames.bed
+recursive-include src/sjcab_peak2anno_db/data/blacklists *
+include src/sjcab_peak2anno_db/data/cgi/*_cgi.bed
+global-exclude *.py[cod]
+global-exclude __pycache__
+include README.md
+include pyproject.toml
+include MANIFEST.in
+recursive-include tests *.py
+recursive-include conda *.yaml
+include src/sjcab_peak2anno_db/py.typed
+include src/sjcab_peak2anno_db/data/gencode.v31lift37.hg19.gene.bed.withtype
+include src/sjcab_peak2anno_db/data/gencode.v31.hg38.gene.bed.withtype
+include src/sjcab_peak2anno_db/data/gencode.vM22.mm10.gene.bed.withtype
+include src/sjcab_peak2anno_db/data/gencode.vM17.mm9.gene.bed.withtype
+include src/sjcab_peak2anno_db/data/gencode.vM39.mm39.gene.bed.withtype
+include src/sjcab_peak2anno_db/data/sacCer3.geneNames.bed
+recursive-include src/sjcab_peak2anno_db/data/blacklists *
+include src/sjcab_peak2anno_db/data/cgi/*_cgi.bed
+
+prune build
+prune dist
+prune backup
+prune .mamba-root
+prune .pytest_cache
+prune .ruff_cache
+prune UNKNOWN.egg-info
+prune src/sjcab_peak2anno_db.egg-info
+
+global-exclude __pycache__ *.py[cod]
