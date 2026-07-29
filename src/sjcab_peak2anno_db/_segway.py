@@ -54,8 +54,8 @@ class SegwayFile:
 
     name: str
     url: str
-    encode_url: str = ""
     kind: str
+    encode_url: str = ""
 
     @property
     def key(self) -> str:
@@ -539,7 +539,7 @@ def _select_files_from_sources(
                     )
                     fallback_source_name = _manifest_source_name(fallback_source)
                     if all(
-                        _manifest_source_name(entry.url) == fallback_source_name
+                        _manifest_source_name(entry.encode_url or entry.url) == fallback_source_name
                         for entry in selected
                     ):
                         selected_source = fallback_source
@@ -722,7 +722,7 @@ def _selected_fallback_source_url(
         source_name = _manifest_source_name(page_url)
         if source_name is None or source_name == primary_source:
             continue
-        if any(_manifest_source_name(entry.url) == source_name for entry in selected):
+        if any(_manifest_source_name(entry.encode_url or entry.url) == source_name for entry in selected):
             return page_url
     return None
 
@@ -761,7 +761,7 @@ def _discover_files_from_page(page_url: str) -> Tuple[SegwayFile, ...]:
                 seen,
                 filename,
                 urllib.parse.urljoin(page_url, href),
-                encode_url=_aggregate_kind(filename),
+                kind=_aggregate_kind(filename),
             )
 
     for directory_url in _interpreted_directory_urls(html, page_url):
@@ -777,7 +777,7 @@ def _discover_files_from_page(page_url: str) -> Tuple[SegwayFile, ...]:
                     seen,
                     filename,
                     urllib.parse.urljoin(directory_url, href),
-                    "celltype",
+                    kind="celltype",
                 )
 
     for href in _html_links(html):
@@ -788,7 +788,7 @@ def _discover_files_from_page(page_url: str) -> Tuple[SegwayFile, ...]:
                 seen,
                 filename,
                 urllib.parse.urljoin(page_url, href),
-                "celltype",
+                kind="celltype",
             )
 
     return tuple(entries)

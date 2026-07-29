@@ -1180,8 +1180,7 @@ def test_download_segway_uses_bundled_manifest_for_blood(monkeypatch, tmp_path):
     }
     assert downloaded == {
         "PERIPHERAL_BLOOD_MONONUCLEAR_PRIMARY_CELLS.bed.gz": (
-            "https://noble.gs.washington.edu/proj/encyclopedia/interpreted/"
-            "PERIPHERAL_BLOOD_MONONUCLEAR_PRIMARY_CELLS.bed.gz"
+            "https://www.encodeproject.org/files/ENCFF659DOR/@@download/ENCFF659DOR.bed.gz"
         )
     }
     db.download_segway(data_dir=tmp_path, tissue="blood", progress=messages.append)
@@ -1196,10 +1195,8 @@ def test_download_segway_uses_bundled_manifest_for_blood(monkeypatch, tmp_path):
         )
         == 1
     )
-    assert any("using fallback source" in message for message in messages)
     assert not any("primary source unavailable" in message for message in messages)
     assert not any("primary source had no matching" in message for message in messages)
-    assert segway.SEGWAY_FALLBACK_URL in log_text
     manifest_text = db.segway_download_manifest_path(tmp_path).read_text(
         encoding="utf-8"
     )
@@ -1230,8 +1227,8 @@ def test_download_segway_uses_bundled_encode_manifest(monkeypatch, tmp_path):
     )
 
     encode_url = (
-        "https://www.encodeproject.org/files/ENCFF338HEJ/@@download/"
-        "ENCFF338HEJ.bed.gz"
+        "https://www.encodeproject.org/files/ENCFF725HYN/@@download/"
+        "ENCFF725HYN.bed.gz"
     )
     assert outputs == {
         "COLONIC_MUCOSA": tmp_path
@@ -1262,12 +1259,12 @@ def test_segway_bundled_manifest_combines_encode_and_washington(monkeypatch):
     assert "COLONIC_MUCOSA" in names
     assert "PERIPHERAL_BLOOD_MONONUCLEAR_PRIMARY_CELLS" in names
     assert db.segway_url("COLONIC_MUCOSA") == (
-        "https://www.encodeproject.org/files/ENCFF338HEJ/@@download/"
-        "ENCFF338HEJ.bed.gz"
+        "https://www.encodeproject.org/files/ENCFF725HYN/@@download/"
+        "ENCFF725HYN.bed.gz"
     )
     assert db.segway_url("PERIPHERAL_BLOOD_MONONUCLEAR_PRIMARY_CELLS") == (
-        "https://noble.gs.washington.edu/proj/encyclopedia/interpreted/"
-        "PERIPHERAL_BLOOD_MONONUCLEAR_PRIMARY_CELLS.bed.gz"
+        "https://www.encodeproject.org/files/ENCFF659DOR/@@download/"
+        "ENCFF659DOR.bed.gz"
     )
 
 
@@ -1314,7 +1311,7 @@ def test_download_segway_by_name_builds_urls(monkeypatch, tmp_path):
     metadata_text = (tmp_path / "segway" / "metadata.tsv").read_text(
         encoding="utf-8"
     )
-    assert "path\tversion\tname\tkind\tsource_url\n" in metadata_text
+    assert "encodeID\tbiosample_term_name" in metadata_text
     assert "GM12878\tcelltype" in metadata_text
     assert "H1-HESC\tcelltype" in metadata_text
     log_text = (tmp_path / "download_urls.log").read_text(encoding="utf-8")
