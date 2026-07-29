@@ -286,6 +286,78 @@ db.download_chromhmm(model=18, genome="hg38", ids="E063")
 db.download_chromhmm(model=25, genome="hg19", cellline="GM12878")
 ```
 
+## Segway
+
+Segway commands download the hg19 Segway encyclopedia of human regulatory
+elements by trying the ENCODE publication page first
+(`https://www.encodeproject.org/publications/94941f71-80c8-43d2-809b-25161efc3be0/`),
+then falling back to `https://noble.gs.washington.edu/proj/encyclopedia/`.
+If ENCODE returns a human-verification page or no Segway download links, the CLI
+prints a fallback message and records only the source that actually provided the
+downloaded files.
+
+### `install-segway` / `download-segway`
+
+`install-segway` writes into the user data directory. `download-segway` writes
+into the selected output directory. With no selector, the command downloads
+`segway_encyclopedia.bed.gz`. Existing files are skipped by default; pass
+`--overwrite` to replace them.
+
+```bash
+sjcab-peak2anno-db install-segway
+sjcab-peak2anno-db install-segway -i GM12878,H1-HESC --include-label-info
+
+sjcab-peak2anno-db download-segway -o segway_downloads -i GM12878
+sjcab-peak2anno-db download-segway -o segway_downloads -t brain
+sjcab-peak2anno-db download-segway -o segway_downloads --include-caas
+```
+
+Segway source files are hg19 only. If another genome is requested, the CLI asks
+whether to download hg19 and write a CrossMap liftover helper script. In
+non-interactive runs, use `--yes-liftover`.
+
+```bash
+sjcab-peak2anno-db download-segway -o segway_downloads -G hg38 --yes-liftover -i GM12878
+```
+
+The generated script first tries to activate an existing `segway-liftover`
+environment with micromamba, conda, or mamba. If activation succeeds, the script
+does not install or modify packages inside it. If activation fails for all
+available tools, the script creates the environment with CrossMap. It downloads
+the UCSC `hg19To<Genome>.over.chain.gz` file from
+`https://hgdownload.soe.ucsc.edu/goldenPath/hg19/liftOver/` and lifts over
+downloaded `.bed.gz` files. For `install-segway`, lifted files are staged and
+then copied into the installed Segway cache under
+`~/.sjcab_peak2anno_db/segway/{genome}` unless `-d` selects another data
+directory.
+
+Output layout:
+
+```text
+{data_dir}/segway/hg19/segway_encyclopedia.bed.gz
+{data_dir}/segway/hg19/caas.bed.gz
+{data_dir}/segway/hg19/label_info.tab
+{data_dir}/segway/hg19/{sample}.bed.gz
+{data_dir}/segway/metadata.tsv
+{data_dir}/segway/liftover_hg19_to_{genome}.sh
+```
+
+Lifted BED files include `lift` in the genome suffix, for example:
+
+```text
+{data_dir}/segway/hg38/PERIPHERAL_BLOOD_MONONUCLEAR_PRIMARY_CELLS.hg38lift.bed.gz
+```
+
+Python API:
+
+```python
+import sjcab_peak2anno_db as db
+
+db.download_segway(names="GM12878,H1-HESC")
+db.download_segway(tissue="brain")
+db.write_segway_liftover_script(target_genome="hg38")
+```
+
 ## Blacklists And CGI
 
 Blacklist files are bundled. CGI files are bundled for install and can also be
@@ -373,6 +445,10 @@ sjcab-peak2anno-db install-chromhmm -m 18 -G hg19 -i E001,E063
 sjcab-peak2anno-db install-chromhmm -m 18 -G hg38 -i E063
 sjcab-peak2anno-db download-chromhmm -o chromhmm_downloads -m 25 -G hg19 -c GM12878
 sjcab-peak2anno-db download-chromhmm -o chromhmm_downloads -m 18 -G hg38 -i E063
+
+sjcab-peak2anno-db install-segway -i GM12878,H1-HESC
+sjcab-peak2anno-db download-segway -o segway_downloads -t brain
+sjcab-peak2anno-db download-segway -o segway_downloads -G hg38 --yes-liftover -i GM12878
 
 sjcab-peak2anno-db install-blacklists
 sjcab-peak2anno-db install-cgi

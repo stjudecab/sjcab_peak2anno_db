@@ -29,6 +29,12 @@ from ._registry import (
     iter_resources,
     path,
 )
+from ._segway import (
+    download_segway,
+    install_segway,
+    segway_root,
+    write_segway_liftover_script,
+)
 
 _ANNOTATION_CHOICES = ANNOTATION_TYPES + ("deduplong",)
 _GENCODE_FEATURE_SPECIES = ("hg38", "hg19", "mm10", "mm9", "mm39")
@@ -302,6 +308,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "install-chromhmm",
         "Download Roadmap ChromHMM dense BED files into the user data directory.",
     )
+    _add_segway_parser(
+        subparsers,
+        "download-segway",
+        "Download Segway encyclopedia hg19 BED files.",
+    )
+    _add_segway_parser(
+        subparsers,
+        "install-segway",
+        "Download Segway encyclopedia hg19 BED files into the user data directory.",
+    )
 
     args = parser.parse_args(argv)
 
@@ -480,6 +496,57 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             )
             for eid in sorted(targets):
                 print("{}\t{}".format(eid, targets[eid]))
+            return 0
+        if args.command in {"download-segway", "install-segway"}:
+            segway_data_dir = (
+                args.output_dir if args.command == "download-segway" else args.data_dir
+            )
+            requested_genome = args.genome
+            download_genome = requested_genome
+            liftover_script = None
+            if requested_genome.lower() != "hg19":
+                if not args.yes_liftover and not _confirm_segway_liftover(
+                    requested_genome
+                ):
+                    raise UnknownResourceError(
+                        "Segway encyclopedia downloads are hg19 only. Re-run with "
+                        "--yes-liftover to download hg19 and write a liftover "
+                        "script for {}.".format(requested_genome)
+                    )
+                download_genome = "hg19"
+
+            segway_function = (
+                install_segway
+                if args.command == "install-segway"
+                else download_segway
+            )
+            targets = segway_function(
+                data_dir=segway_data_dir,
+                genome=download_genome,
+                names=args.names,
+                tissue=args.tissue,
+                cellline=args.cellline,
+                all_celltypes=args.all_celltypes,
+                include_encyclopedia=args.include_encyclopedia,
+                include_caas=args.include_caas,
+                include_label_info=args.include_label_info,
+                overwrite=args.overwrite,
+                progress=_stderr_progress,
+            )
+            if requested_genome.lower() != "hg19":
+                liftover_script = write_segway_liftover_script(
+                    data_dir=segway_data_dir,
+                    target_genome=requested_genome,
+                    install_root=(
+                        segway_root(segway_data_dir)
+                        if args.command == "install-segway"
+                        else None
+                    ),
+                )
+            for name in sorted(targets):
+                print("{}\t{}".format(name, targets[name]))
+            if liftover_script is not None:
+                print("liftover_script\t{}".format(liftover_script))
             return 0
     except (UnknownResourceError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -732,6 +799,113 @@ def _add_chromhmm_parser(
         action="store_true",
         help="Do not rewrite existing ChromHMM files.",
     )
+
+
+def _add_segway_parser(
+    subparsers: argparse._SubParsersAction,
+    name: str,
+    help_text: str,
+) -> None:
+    parser = subparsers.add_parser(name, help=help_text)
+    if name == "download-segway":
+        parser.add_argument(
+            "-o",
+            "--output-dir",
+            default=".",
+            help="Directory for downloaded Segway files.",
+        )
+    else:
+        parser.add_argument(
+            "-d", "--data-dir", help="Generated annotation directory."
+        )
+    parser.add_argument(
+        "-G",
+        "--genome",
+        default="hg19",
+        help=(
+            "Genome build for BED files. Segway source files are hg19; other "
+            "builds require --yes-liftover to write a CrossMap script."
+        ),
+    )
+    parser.add_argument(
+        "-i",
+        "--id",
+        "--ids",
+        "--sample",
+        "--samples",
+        dest="names",
+        action="append",
+        help=(
+            "Segway sample/resource list, for example GM12878,H1-HESC,caas. "
+            "Can be repeated."
+        ),
+    )
+    parser.add_argument(
+        "-t",
+        "--tissue",
+        action="append",
+        help="Fuzzy tissue/sample keyword, for example brain or liver.",
+    )
+    parser.add_argument(
+        "-c",
+        "--cellline",
+        action="append",
+        help="Fuzzy cell-line/sample keyword, for example H1 or GM12878.",
+    )
+    parser.add_argument(
+        "--all-celltypes",
+        action="store_true",
+        help="Download all discovered cell type-specific Segway BED files.",
+    )
+    parser.add_argument(
+        "--include-encyclopedia",
+        action="store_true",
+        help="Download segway_encyclopedia.bed.gz.",
+    )
+    parser.add_argument(
+        "--include-caas",
+        action="store_true",
+        help="Download caas.bed.gz.",
+    )
+    parser.add_argument(
+        "--include-label-info",
+        action="store_true",
+        help="Download label_info.tab.",
+    )
+    parser.add_argument(
+        "--yes-liftover",
+        action="store_true",
+        help=(
+            "For non-hg19 --genome requests, download hg19 files and write a "
+            "CrossMap liftover script without prompting."
+        ),
+    )
+    overwrite_group = parser.add_mutually_exclusive_group()
+    overwrite_group.add_argument(
+        "-n",
+        "--no-overwrite",
+        action="store_false",
+        dest="overwrite",
+        default=False,
+        help="Do not rewrite existing Segway files. This is the default.",
+    )
+    overwrite_group.add_argument(
+        "--overwrite",
+        action="store_true",
+        dest="overwrite",
+        help="Rewrite existing Segway files.",
+    )
+
+
+def _confirm_segway_liftover(genome: str) -> bool:
+    if not sys.stdin.isatty():
+        return False
+    prompt = (
+        "Segway encyclopedia downloads are hg19 only. Download hg19 and write "
+        "a CrossMap liftover script for {}? [y/N] ".format(genome)
+    )
+    response = input(prompt).strip().lower()
+    return response in {"y", "yes"}
 
 
 def _install_components_from_args(args: argparse.Namespace) -> Optional[Sequence[str]]:

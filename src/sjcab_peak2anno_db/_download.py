@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 ProgressCallback = Callable[[str], None]
+USER_AGENT = "sjcab-peak2anno-db"
 
 
 def report_progress(
@@ -33,8 +34,16 @@ def download_file(
     label = destination.name
 
     report_progress(progress, "download {}:".format(label))
+    request = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": USER_AGENT,
+            "Accept": "application/octet-stream,*/*",
+        },
+    )
+
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as response, tmp_path.open(
+        with urllib.request.urlopen(request, timeout=timeout) as response, tmp_path.open(
             "wb"
         ) as output:
             size = _content_length(response)

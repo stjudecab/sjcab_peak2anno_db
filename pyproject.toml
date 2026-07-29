@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sjcab_peak2anno_db"
-version = "0.1.4"
+version = "0.1.5"
 description = "Gene-backed peak-to-annotation BED resources for SJ/CAB workflows."
 readme = "README.md"
 requires-python = ">=3.7"
@@ -46,6 +46,7 @@ sjcab_peak2anno_db = [
   "data/gencode.vM17.mm9.gene.bed.withtype",
   "data/gencode.vM39.mm39.gene.bed.withtype",
   "data/sacCer3.geneNames.bed",
+  "data/segway_downloads.tsv",
   "data/blacklists/*",
   "data/cgi/*_cgi.bed",
 ]

@@ -7,6 +7,7 @@ import sjcab_peak2anno_db._dedup as dedup
 import sjcab_peak2anno_db._download as download
 import sjcab_peak2anno_db._gencode as gencode
 import sjcab_peak2anno_db._install as install
+import sjcab_peak2anno_db._segway as segway
 
 
 def _write_mini_gencode_region_gtf(tmp_path):
@@ -60,6 +61,40 @@ var data_epg=
 """
 
 
+def _segway_index_html():
+    return """
+<a href="interpreted">Directory</a>
+<a href=segway_encyclopedia.bed.gz>BED format</a>
+<a href=label_info.tab>tab-delimited format</a>
+<a href="caas.bed.gz">BED format</a>
+"""
+
+
+def _segway_interpreted_html():
+    return """
+<a href="GM12878.bed.gz">GM12878.bed.gz</a>
+<a href="H1-HESC.bed.gz">H1-HESC.bed.gz</a>
+<a href="BRAIN_ANGULAR_GYRUS.bed.gz">BRAIN_ANGULAR_GYRUS.bed.gz</a>
+"""
+
+
+def _segway_encode_file(accession, href, submitted_file_name, **kwargs):
+    payload = {
+        "@type": ["File", "Item"],
+        "accession": accession,
+        "href": href,
+        "file_format": "bed",
+        "file_format_type": "bed9",
+        "output_type": "semi-automated genome annotation",
+        "assembly": "GRCh37",
+        "status": "released",
+        "submitted_file_name": submitted_file_name,
+        "aliases": ["encode:segway-recolored"],
+    }
+    payload.update(kwargs)
+    return payload
+
+
 def test_download_file_reports_every_five_percent(monkeypatch, tmp_path):
     class FakeResponse:
         headers = {"Content-Length": "100"}
@@ -79,7 +114,8 @@ def test_download_file_reports_every_five_percent(monkeypatch, tmp_path):
             return chunk
 
     def fake_urlopen(url, timeout):
-        assert url == "https://example.org/file.bed"
+        assert url.full_url == "https://example.org/file.bed"
+        assert url.headers["User-agent"] == "sjcab-peak2anno-db"
         assert timeout == 120
         return FakeResponse()
 
@@ -740,7 +776,7 @@ def test_install_chromhmm_uses_data_dir_option(monkeypatch, tmp_path):
 def test_download_chromhmm_by_id_builds_dense_bed_urls(monkeypatch, tmp_path):
     downloaded = {}
 
-    def fake_download(url, destination):
+    def fake_download(url, destination, progress=None):
         downloaded[destination.name] = url
         destination.write_text(url, encoding="utf-8")
 
@@ -793,7 +829,7 @@ def test_download_chromhmm_by_id_builds_dense_bed_urls(monkeypatch, tmp_path):
 def test_download_chromhmm_skips_unavailable_requested_ids(monkeypatch, tmp_path):
     downloaded = {}
 
-    def fake_download(url, destination):
+    def fake_download(url, destination, progress=None):
         downloaded[destination.name] = url
         destination.write_text(url, encoding="utf-8")
 
@@ -818,7 +854,7 @@ def test_download_chromhmm_skips_unavailable_requested_ids(monkeypatch, tmp_path
 def test_download_chromhmm_hg38_uses_lifted_over_url(monkeypatch, tmp_path):
     downloaded = {}
 
-    def fake_download(url, destination):
+    def fake_download(url, destination, progress=None):
         downloaded[destination.name] = url
         destination.write_text(url, encoding="utf-8")
 
@@ -895,6 +931,688 @@ var data_epg=
 
     assert tuple(outputs) == ("E063",)
     assert outputs["E063"].name == "E063_18_core_K27ac_dense.bed.gz"
+
+
+def test_download_segway_accepts_short_options(monkeypatch, tmp_path):
+    called = {}
+
+    def fake_download(
+        data_dir=None,
+        genome="hg19",
+        names=None,
+        tissue=None,
+        cellline=None,
+        all_celltypes=False,
+        include_encyclopedia=False,
+        include_caas=False,
+        include_label_info=False,
+        overwrite=True,
+        progress=None,
+    ):
+        called["data_dir"] = data_dir
+        called["genome"] = genome
+        called["names"] = names
+        called["tissue"] = tissue
+        called["cellline"] = cellline
+        called["all_celltypes"] = all_celltypes
+        called["include_encyclopedia"] = include_encyclopedia
+        called["include_caas"] = include_caas
+        called["include_label_info"] = include_label_info
+        called["overwrite"] = overwrite
+        called["progress"] = progress
+        return {"GM12878": tmp_path / "GM12878.bed.gz"}
+
+    monkeypatch.setattr(cli, "download_segway", fake_download)
+
+    assert (
+        cli.main(
+            [
+                "download-segway",
+                "-o",
+                str(tmp_path),
+                "-G",
+                "hg19",
+                "-i",
+                "GM12878",
+                "-t",
+                "brain",
+                "-c",
+                "H1",
+                "--all-celltypes",
+                "--include-encyclopedia",
+                "--include-caas",
+                "--include-label-info",
+            ]
+        )
+        == 0
+    )
+    assert called == {
+        "data_dir": str(tmp_path),
+        "genome": "hg19",
+        "names": ["GM12878"],
+        "tissue": ["brain"],
+        "cellline": ["H1"],
+        "all_celltypes": True,
+        "include_encyclopedia": True,
+        "include_caas": True,
+        "include_label_info": True,
+        "overwrite": False,
+        "progress": cli._stderr_progress,
+    }
+
+
+def test_install_segway_uses_data_dir_option(monkeypatch, tmp_path):
+    called = {}
+
+    def fake_install(
+        data_dir=None,
+        genome="hg19",
+        names=None,
+        tissue=None,
+        cellline=None,
+        all_celltypes=False,
+        include_encyclopedia=False,
+        include_caas=False,
+        include_label_info=False,
+        overwrite=True,
+        progress=None,
+    ):
+        called["data_dir"] = data_dir
+        called["names"] = names
+        called["overwrite"] = overwrite
+        return {"GM12878": tmp_path / "GM12878.bed.gz"}
+
+    monkeypatch.setattr(cli, "install_segway", fake_install)
+
+    assert cli.main(["install-segway", "-d", str(tmp_path), "-i", "GM12878", "-n"]) == 0
+    assert called["data_dir"] == str(tmp_path)
+    assert called["names"] == ["GM12878"]
+    assert called["overwrite"] is False
+
+
+def test_download_segway_discovers_encode_accessions(monkeypatch, tmp_path):
+    downloaded = {}
+    messages = []
+    source_url = segway.SEGWAY_URL.replace("www.", "test.")
+
+    def fake_fetch_json(url):
+        assert url == (
+            source_url
+            + "?format=json&frame=embedded"
+        )
+        return {
+            "@id": "/publications/94941f71-80c8-43d2-809b-25161efc3be0/",
+            "files": [
+                _segway_encode_file(
+                    "ENCFF314OLC",
+                    "/files/ENCFF314OLC/@@download/ENCFF314OLC.bed.gz",
+                    "segway_encyclopedia.bed.gz",
+                    output_type="Segway encyclopedia",
+                ),
+                _segway_encode_file(
+                    "ENCFF222ABC",
+                    "/files/ENCFF222ABC/@@download/ENCFF222ABC.bed.gz",
+                    (
+                        "gs://encode/segway/"
+                        "PERIPHERAL_BLOOD_MONONUCLEAR_PRIMARY_CELLS/ann.bed"
+                    ),
+                ),
+            ],
+        }
+
+    def fake_download(url, destination, progress=None):
+        downloaded[destination.name] = url
+        destination.write_text(url, encoding="utf-8")
+
+    monkeypatch.setattr(segway, "_fetch_encode_json", fake_fetch_json)
+    monkeypatch.setattr(segway, "_download_file", fake_download)
+
+    outputs = db.download_segway(
+        data_dir=tmp_path,
+        source_url=source_url,
+        fallback_url=source_url,
+        names="PERIPHERAL_BLOOD_MONONUCLEAR_PRIMARY_CELLS",
+        include_encyclopedia=True,
+        progress=messages.append,
+    )
+
+    assert outputs["PERIPHERAL_BLOOD_MONONUCLEAR_PRIMARY_CELLS"] == (
+        tmp_path / "segway" / "hg19" / "PERIPHERAL_BLOOD_MONONUCLEAR_PRIMARY_CELLS.bed.gz"
+    )
+    assert outputs["segway_encyclopedia"] == (
+        tmp_path / "segway" / "hg19" / "segway_encyclopedia.bed.gz"
+    )
+    assert downloaded == {
+        "PERIPHERAL_BLOOD_MONONUCLEAR_PRIMARY_CELLS.bed.gz": (
+            "https://www.encodeproject.org/files/ENCFF222ABC/@@download/"
+            "ENCFF222ABC.bed.gz"
+        ),
+        "segway_encyclopedia.bed.gz": (
+            "https://www.encodeproject.org/files/ENCFF314OLC/@@download/"
+            "ENCFF314OLC.bed.gz"
+        ),
+    }
+    log_text = (tmp_path / "download_urls.log").read_text(encoding="utf-8")
+    assert "ENCFF314OLC" in log_text
+    assert "ENCFF222ABC" in log_text
+    assert not any("fallback" in message for message in messages)
+
+
+def test_download_segway_searches_encode_related_accessions(monkeypatch, tmp_path):
+    downloaded = {}
+    seen_urls = []
+    source_url = segway.SEGWAY_URL.replace("www.", "test.")
+
+    def fake_fetch_json(url):
+        seen_urls.append(url)
+        if url == source_url + "?format=json&frame=embedded":
+            return {
+                "@id": "/publications/94941f71-80c8-43d2-809b-25161efc3be0/",
+                "files": [],
+            }
+        if "type=File" in url and "references=" in url:
+            return {
+                "@graph": [
+                    _segway_encode_file(
+                        "ENCFF555AAA",
+                        "/files/ENCFF555AAA/@@download/ENCFF555AAA.bed.gz",
+                        "gs://encode/segway/H1-HESC/ann.bed",
+                    )
+                ]
+            }
+        if "type=Annotation" in url and "references=" in url:
+            return {"@graph": []}
+        raise AssertionError(url)
+
+    def fake_download(url, destination, progress=None):
+        downloaded[destination.name] = url
+        destination.write_text(url, encoding="utf-8")
+
+    monkeypatch.setattr(segway, "_fetch_encode_json", fake_fetch_json)
+    monkeypatch.setattr(segway, "_download_file", fake_download)
+
+    outputs = db.download_segway(
+        data_dir=tmp_path,
+        source_url=source_url,
+        fallback_url=source_url,
+        names="H1-HESC",
+    )
+
+    assert outputs["H1-HESC"] == tmp_path / "segway" / "hg19" / "H1-HESC.bed.gz"
+    assert downloaded == {
+        "H1-HESC.bed.gz": (
+            "https://www.encodeproject.org/files/ENCFF555AAA/@@download/"
+            "ENCFF555AAA.bed.gz"
+        )
+    }
+    assert any("type=File" in url for url in seen_urls)
+
+
+def test_download_segway_uses_bundled_manifest_for_blood(monkeypatch, tmp_path):
+    downloaded = {}
+    messages = []
+
+    def fail_fetch(*args, **kwargs):
+        raise AssertionError("built-in Segway sources should use bundled metadata")
+
+    def fake_download(url, destination, progress=None):
+        downloaded[destination.name] = url
+        destination.write_text(url, encoding="utf-8")
+
+    monkeypatch.setattr(segway, "_fetch_encode_json", fail_fetch)
+    monkeypatch.setattr(segway, "_fetch_text", fail_fetch)
+    monkeypatch.setattr(segway, "_download_file", fake_download)
+    monkeypatch.setattr(segway, "_BUNDLED_SEGWAY_FILES", None)
+
+    outputs = db.download_segway(
+        data_dir=tmp_path,
+        tissue="blood",
+        progress=messages.append,
+    )
+
+    assert outputs == {
+        "PERIPHERAL_BLOOD_MONONUCLEAR_PRIMARY_CELLS": (
+            tmp_path
+            / "segway"
+            / "hg19"
+            / "PERIPHERAL_BLOOD_MONONUCLEAR_PRIMARY_CELLS.bed.gz"
+        )
+    }
+    assert downloaded == {
+        "PERIPHERAL_BLOOD_MONONUCLEAR_PRIMARY_CELLS.bed.gz": (
+            "https://noble.gs.washington.edu/proj/encyclopedia/interpreted/"
+            "PERIPHERAL_BLOOD_MONONUCLEAR_PRIMARY_CELLS.bed.gz"
+        )
+    }
+    db.download_segway(data_dir=tmp_path, tissue="blood", progress=messages.append)
+    metadata_lines = (tmp_path / "segway" / "metadata.tsv").read_text(
+        encoding="utf-8"
+    ).splitlines()
+    log_text = (tmp_path / "download_urls.log").read_text(encoding="utf-8")
+    assert (
+        sum(
+            "PERIPHERAL_BLOOD_MONONUCLEAR_PRIMARY_CELLS" in line
+            for line in metadata_lines
+        )
+        == 1
+    )
+    assert any("using fallback source" in message for message in messages)
+    assert not any("primary source unavailable" in message for message in messages)
+    assert not any("primary source had no matching" in message for message in messages)
+    assert segway.SEGWAY_FALLBACK_URL in log_text
+    manifest_text = db.segway_download_manifest_path(tmp_path).read_text(
+        encoding="utf-8"
+    )
+    assert "ENCFF338HEJ" in manifest_text
+    assert "PERIPHERAL_BLOOD_MONONUCLEAR_PRIMARY_CELLS" in manifest_text
+
+
+def test_download_segway_uses_bundled_encode_manifest(monkeypatch, tmp_path):
+    downloaded = {}
+    messages = []
+
+    def fail_fetch(*args, **kwargs):
+        raise AssertionError("built-in Segway sources should use bundled metadata")
+
+    def fake_download(url, destination, progress=None):
+        downloaded[destination.name] = url
+        destination.write_text(url, encoding="utf-8")
+
+    monkeypatch.setattr(segway, "_fetch_encode_json", fail_fetch)
+    monkeypatch.setattr(segway, "_fetch_text", fail_fetch)
+    monkeypatch.setattr(segway, "_download_file", fake_download)
+    monkeypatch.setattr(segway, "_BUNDLED_SEGWAY_FILES", None)
+
+    outputs = db.download_segway(
+        data_dir=tmp_path,
+        names="COLONIC_MUCOSA",
+        progress=messages.append,
+    )
+
+    encode_url = (
+        "https://www.encodeproject.org/files/ENCFF338HEJ/@@download/"
+        "ENCFF338HEJ.bed.gz"
+    )
+    assert outputs == {
+        "COLONIC_MUCOSA": tmp_path
+        / "segway"
+        / "hg19"
+        / "COLONIC_MUCOSA.bed.gz"
+    }
+    assert downloaded == {"COLONIC_MUCOSA.bed.gz": encode_url}
+    assert not any("fallback" in message for message in messages)
+    assert encode_url in (tmp_path / "segway" / "metadata.tsv").read_text(
+        encoding="utf-8"
+    )
+    assert "ENCFF338HEJ" in db.segway_download_manifest_path(tmp_path).read_text(
+        encoding="utf-8"
+    )
+
+
+def test_segway_bundled_manifest_combines_encode_and_washington(monkeypatch):
+    def fail_fetch(*args, **kwargs):
+        raise AssertionError("built-in Segway sources should use bundled metadata")
+
+    monkeypatch.setattr(segway, "_fetch_encode_json", fail_fetch)
+    monkeypatch.setattr(segway, "_fetch_text", fail_fetch)
+    monkeypatch.setattr(segway, "_BUNDLED_SEGWAY_FILES", None)
+
+    names = db.segway_available_names()
+
+    assert "COLONIC_MUCOSA" in names
+    assert "PERIPHERAL_BLOOD_MONONUCLEAR_PRIMARY_CELLS" in names
+    assert db.segway_url("COLONIC_MUCOSA") == (
+        "https://www.encodeproject.org/files/ENCFF338HEJ/@@download/"
+        "ENCFF338HEJ.bed.gz"
+    )
+    assert db.segway_url("PERIPHERAL_BLOOD_MONONUCLEAR_PRIMARY_CELLS") == (
+        "https://noble.gs.washington.edu/proj/encyclopedia/interpreted/"
+        "PERIPHERAL_BLOOD_MONONUCLEAR_PRIMARY_CELLS.bed.gz"
+    )
+
+
+def test_download_segway_by_name_builds_urls(monkeypatch, tmp_path):
+    downloaded = {}
+    source_url = "https://example.org/segway/"
+    interpreted_url = source_url + "interpreted/"
+
+    def fake_fetch(url):
+        if url == source_url:
+            return _segway_index_html()
+        if url == interpreted_url:
+            return _segway_interpreted_html()
+        raise AssertionError(url)
+
+    def fake_download(url, destination, progress=None):
+        downloaded[destination.name] = url
+        destination.write_text(url, encoding="utf-8")
+
+    monkeypatch.setattr(segway, "_fetch_text", fake_fetch)
+    monkeypatch.setattr(segway, "_download_file", fake_download)
+
+    outputs = db.download_segway(
+        data_dir=tmp_path,
+        names="GM12878,H1-HESC",
+        source_url=source_url,
+        fallback_url=source_url,
+    )
+
+    assert outputs["GM12878"] == (
+        tmp_path / "segway" / "hg19" / "GM12878.bed.gz"
+    )
+    assert outputs["H1-HESC"] == (
+        tmp_path / "segway" / "hg19" / "H1-HESC.bed.gz"
+    )
+    assert downloaded == {
+        "GM12878.bed.gz": (
+            interpreted_url + "GM12878.bed.gz"
+        ),
+        "H1-HESC.bed.gz": (
+            interpreted_url + "H1-HESC.bed.gz"
+        ),
+    }
+    metadata_text = (tmp_path / "segway" / "metadata.tsv").read_text(
+        encoding="utf-8"
+    )
+    assert "path\tversion\tname\tkind\tsource_url\n" in metadata_text
+    assert "GM12878\tcelltype" in metadata_text
+    assert "H1-HESC\tcelltype" in metadata_text
+    log_text = (tmp_path / "download_urls.log").read_text(encoding="utf-8")
+    assert "interpreted/GM12878.bed.gz" in log_text
+    assert source_url in log_text
+
+
+def test_download_segway_skips_existing_files_by_default(monkeypatch, tmp_path):
+    destination = tmp_path / "segway" / "hg19" / "GM12878.bed.gz"
+    destination.parent.mkdir(parents=True)
+    destination.write_text("cached\n", encoding="utf-8")
+    source_url = "https://example.org/segway/"
+    interpreted_url = source_url + "interpreted/"
+
+    def fake_fetch(url):
+        if url == source_url:
+            return _segway_index_html()
+        if url == interpreted_url:
+            return _segway_interpreted_html()
+        raise AssertionError(url)
+
+    def fake_download(url, destination):
+        raise AssertionError("existing Segway files should be skipped")
+
+    monkeypatch.setattr(segway, "_fetch_text", fake_fetch)
+    monkeypatch.setattr(segway, "_download_file", fake_download)
+
+    outputs = db.download_segway(
+        data_dir=tmp_path,
+        names="GM12878",
+        source_url=source_url,
+        fallback_url=source_url,
+    )
+
+    assert outputs["GM12878"] == destination
+    assert destination.read_text(encoding="utf-8") == "cached\n"
+
+
+def test_download_segway_defaults_to_encyclopedia(monkeypatch, tmp_path):
+    downloaded = {}
+    source_url = "https://example.org/segway/"
+    interpreted_url = source_url + "interpreted/"
+
+    def fake_fetch(url):
+        if url == source_url:
+            return _segway_index_html()
+        if url == interpreted_url:
+            return _segway_interpreted_html()
+        raise AssertionError(url)
+
+    def fake_download(url, destination):
+        downloaded[destination.name] = url
+        destination.write_text(url, encoding="utf-8")
+
+    monkeypatch.setattr(segway, "_fetch_text", fake_fetch)
+    monkeypatch.setattr(segway, "_download_file", fake_download)
+
+    outputs = db.download_segway(
+        data_dir=tmp_path,
+        source_url=source_url,
+        fallback_url=source_url,
+    )
+
+    assert tuple(outputs) == ("segway_encyclopedia",)
+    assert outputs["segway_encyclopedia"] == (
+        tmp_path / "segway" / "hg19" / "segway_encyclopedia.bed.gz"
+    )
+    assert downloaded == {
+        "segway_encyclopedia.bed.gz": (
+            source_url + "segway_encyclopedia.bed.gz"
+        )
+    }
+
+
+def test_download_segway_fuzzy_cellline_selection(monkeypatch, tmp_path):
+    source_url = "https://example.org/segway/"
+    interpreted_url = source_url + "interpreted/"
+
+    def fake_fetch(url):
+        if url == source_url:
+            return _segway_index_html()
+        if url == interpreted_url:
+            return _segway_interpreted_html()
+        raise AssertionError(url)
+
+    def fake_download(url, destination):
+        destination.write_text(url, encoding="utf-8")
+
+    monkeypatch.setattr(segway, "_fetch_text", fake_fetch)
+    monkeypatch.setattr(segway, "_download_file", fake_download)
+
+    outputs = db.download_segway(
+        data_dir=tmp_path,
+        cellline="h1 hesc",
+        source_url=source_url,
+        fallback_url=source_url,
+    )
+
+    assert tuple(outputs) == ("H1-HESC",)
+    assert outputs["H1-HESC"].name == "H1-HESC.bed.gz"
+
+
+def test_download_segway_uses_fallback_source(monkeypatch, tmp_path):
+    downloaded = {}
+    source_url = segway.SEGWAY_URL.replace("www.", "test.")
+    fallback_url = "https://fallback.example.org/segway/"
+    messages = []
+
+    def fake_fetch_json(url):
+        raise ValueError("human verification/captcha page returned")
+
+    def fake_fetch(url):
+        if url == fallback_url:
+            return _segway_index_html()
+        if url == fallback_url + "interpreted/":
+            return _segway_interpreted_html()
+        raise AssertionError(url)
+
+    def fake_download(url, destination, progress=None):
+        downloaded[destination.name] = url
+        destination.write_text(url, encoding="utf-8")
+
+    monkeypatch.setattr(segway, "_fetch_encode_json", fake_fetch_json)
+    monkeypatch.setattr(segway, "_fetch_text", fake_fetch)
+    monkeypatch.setattr(segway, "_download_file", fake_download)
+
+    outputs = db.download_segway(
+        data_dir=tmp_path,
+        source_url=source_url,
+        fallback_url=fallback_url,
+        progress=messages.append,
+    )
+
+    assert tuple(outputs) == ("segway_encyclopedia",)
+    assert downloaded == {
+        "segway_encyclopedia.bed.gz": (
+            fallback_url + "segway_encyclopedia.bed.gz"
+        )
+    }
+    assert fallback_url in (tmp_path / "download_urls.log").read_text(
+        encoding="utf-8"
+    )
+    assert any("primary source unavailable" in message for message in messages)
+    assert any("using fallback source" in message for message in messages)
+
+
+def test_download_segway_non_hg19_requires_liftover_confirmation(capsys):
+    assert cli.main(["download-segway", "-G", "hg38"]) == 2
+    captured = capsys.readouterr()
+    assert "--yes-liftover" in captured.err
+
+
+def test_download_segway_yes_liftover_writes_script(monkeypatch, tmp_path, capsys):
+    called = {}
+
+    def fake_download(
+        data_dir=None,
+        genome="hg19",
+        names=None,
+        tissue=None,
+        cellline=None,
+        all_celltypes=False,
+        include_encyclopedia=False,
+        include_caas=False,
+        include_label_info=False,
+        overwrite=True,
+        progress=None,
+    ):
+        called["data_dir"] = data_dir
+        called["genome"] = genome
+        called["names"] = names
+        return {"GM12878": tmp_path / "GM12878.bed.gz"}
+
+    def fake_write(
+        data_dir=None,
+        target_genome="hg38",
+        script_path=None,
+        install_root=None,
+    ):
+        called["liftover_data_dir"] = data_dir
+        called["target_genome"] = target_genome
+        called["install_root"] = install_root
+        return tmp_path / "segway" / "liftover_hg19_to_hg38.sh"
+
+    monkeypatch.setattr(cli, "download_segway", fake_download)
+    monkeypatch.setattr(cli, "write_segway_liftover_script", fake_write)
+
+    assert (
+        cli.main(
+            [
+                "download-segway",
+                "-o",
+                str(tmp_path),
+                "-G",
+                "hg38",
+                "--yes-liftover",
+                "-i",
+                "GM12878",
+            ]
+        )
+        == 0
+    )
+    captured = capsys.readouterr()
+    assert called["data_dir"] == str(tmp_path)
+    assert called["genome"] == "hg19"
+    assert called["target_genome"] == "hg38"
+    assert called["install_root"] is None
+    assert "liftover_script\t" in captured.out
+
+
+def test_install_segway_yes_liftover_sets_install_root(monkeypatch, tmp_path):
+    called = {}
+
+    def fake_install(
+        data_dir=None,
+        genome="hg19",
+        names=None,
+        tissue=None,
+        cellline=None,
+        all_celltypes=False,
+        include_encyclopedia=False,
+        include_caas=False,
+        include_label_info=False,
+        overwrite=False,
+        progress=None,
+    ):
+        called["data_dir"] = data_dir
+        called["genome"] = genome
+        return {"GM12878": tmp_path / "GM12878.bed.gz"}
+
+    def fake_write(
+        data_dir=None,
+        target_genome="hg38",
+        script_path=None,
+        install_root=None,
+    ):
+        called["liftover_data_dir"] = data_dir
+        called["target_genome"] = target_genome
+        called["install_root"] = install_root
+        return tmp_path / "segway" / "liftover_hg19_to_hg38.sh"
+
+    monkeypatch.setattr(cli, "install_segway", fake_install)
+    monkeypatch.setattr(cli, "write_segway_liftover_script", fake_write)
+
+    assert (
+        cli.main(
+            [
+                "install-segway",
+                "-d",
+                str(tmp_path),
+                "-G",
+                "hg38",
+                "--yes-liftover",
+                "-i",
+                "GM12878",
+            ]
+        )
+        == 0
+    )
+
+    assert called["data_dir"] == str(tmp_path)
+    assert called["genome"] == "hg19"
+    assert called["liftover_data_dir"] == str(tmp_path)
+    assert called["target_genome"] == "hg38"
+    assert called["install_root"] == tmp_path / "segway"
+
+
+def test_segway_liftover_script_uses_crossmap_and_ucsc_chain(tmp_path):
+    script = db.segway_liftover_script(
+        tmp_path / "segway" / "hg19",
+        tmp_path / "segway" / "hg38",
+        "hg38",
+        install_root=tmp_path / "install" / "segway",
+    )
+
+    assert "env list" not in script
+    assert "grep -Fxq" not in script
+    assert "activate_existing_env" in script
+    assert "Activated existing conda environment" in script
+    assert "Activated existing micromamba environment" in script
+    assert "Activated existing mamba environment" in script
+    assert "micromamba activate" in script
+    assert "conda activate" in script
+    assert "mamba activate" in script
+    assert "conda run" not in script
+    assert "install -y -n" not in script
+    assert "remove the env so this script can recreate it" in script
+    assert "create_and_activate_env" in script
+    assert 'create -y -n "${ENV_NAME}"' in script
+    assert "crossmap" in script
+    assert "cp -p" in script
+    assert "INSTALL_ROOT=" in script
+    assert "hg38lift.bed" in script
+    assert '${OUTPUT_DIR}"/interpreted' not in script
+    assert '${INSTALL_DIR}"/interpreted' not in script
+    assert "https://hgdownload.soe.ucsc.edu/goldenPath/hg19/liftOver/" in script
+    assert "hg19ToHg38.over.chain.gz" in script
+    assert "CrossMap" in script
 
 
 def test_write_gencode_region_unions_from_gtf(tmp_path):
