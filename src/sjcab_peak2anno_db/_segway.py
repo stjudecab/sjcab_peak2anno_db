@@ -761,7 +761,7 @@ def _discover_files_from_page(page_url: str) -> Tuple[SegwayFile, ...]:
                 seen,
                 filename,
                 urllib.parse.urljoin(page_url, href),
-                _aggregate_kind(filename),
+                encode_url=_aggregate_kind(filename),
             )
 
     for directory_url in _interpreted_directory_urls(html, page_url):
@@ -1346,13 +1346,13 @@ def _append_entry(
     seen: set,
     name: str,
     url: str,
-    encode_url: str = "",
     kind: str,
+    encode_url: str = "",
 ) -> None:
     key = (name, kind)
     if key in seen:
         return
-    entries.append(SegwayFile(name=name, url=url, encode_url=encode_url, kind=kind))
+    entries.append(SegwayFile(name=name, url=url, kind=kind, encode_url=encode_url))
     seen.add(key)
 
 
