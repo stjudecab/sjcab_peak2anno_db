@@ -1971,6 +1971,10 @@ def test_ensembl_gtf_url_uses_release_and_reference():
         "https://ftp.ensembl.org/pub/release-100/gtf/homo_sapiens/"
         "Homo_sapiens.GRCh38.100.gtf.gz"
     )
+    assert ensembl_gtf_url("arabidopsis", "50") == (
+        "https://ftp.ensemblgenomes.ebi.ac.uk/pub/release-50/plants/gtf/"
+        "arabidopsis_thaliana/Arabidopsis_thaliana.TAIR10.50.gtf.gz"
+    )
 
 
 def test_filter_gencode_bed_isoid_omits_unmatched_genes(tmp_path):

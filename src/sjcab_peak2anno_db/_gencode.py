@@ -19,18 +19,43 @@ PathLike = Union[str, os.PathLike]
 
 _ATTRIBUTE_RE = re.compile(r'(\S+)\s+"([^"]*)"')
 _ENSEMBL_SPECIES = {
-    "human": ("homo_sapiens", "GRCh38"),
-    "homo_sapiens": ("homo_sapiens", "GRCh38"),
-    "mouse": ("mus_musculus", "GRCm38"),
-    "mus_musculus": ("mus_musculus", "GRCm38"),
-    "rat": ("rattus_norvegicus", "Rnor_6.0"),
-    "rattus_norvegicus": ("rattus_norvegicus", "Rnor_6.0"),
-    "zebrafish": ("danio_rerio", "GRCz11"),
-    "danio_rerio": ("danio_rerio", "GRCz11"),
-    "fruitfly": ("drosophila_melanogaster", "BDGP6.32"),
-    "drosophila_melanogaster": ("drosophila_melanogaster", "BDGP6.32"),
-    "worm": ("caenorhabditis_elegans", "WBcel235"),
-    "caenorhabditis_elegans": ("caenorhabditis_elegans", "WBcel235"),
+    "human": ("homo_sapiens", "vertebrates", False, (("NCBI36", 54, 54), ("GRCh37", 55, 75), ("GRCh38", 76, 10**9))),
+    "homo_sapiens": ("homo_sapiens", "vertebrates", False, (("NCBI36", 54, 54), ("GRCh37", 55, 75), ("GRCh38", 76, 10**9))),
+    "mouse": ("mus_musculus", "vertebrates", False, (("NCBIM37", 54, 67), ("GRCm38", 68, 102), ("GRCm39", 103, 10**9))),
+    "mus_musculus": ("mus_musculus", "vertebrates", False, (("NCBIM37", 54, 67), ("GRCm38", 68, 102), ("GRCm39", 103, 10**9))),
+    "rat": ("rattus_norvegicus", "vertebrates", False, (("Rnor_6.0", 80, 104), ("mRatBN7.2", 105, 113), ("GRCr8", 114, 10**9))),
+    "rattus_norvegicus": ("rattus_norvegicus", "vertebrates", False, (("Rnor_6.0", 80, 104), ("mRatBN7.2", 105, 113), ("GRCr8", 114, 10**9))),
+    "dog": ("canis_familiaris", "vertebrates", False, (("CanFam3.1", 75, 10**9),)),
+    "cat": ("felis_catus", "vertebrates", False, (("Felis_catus_9.0", 93, 10**9),)),
+    "chicken": ("gallus_gallus", "vertebrates", False, (("Gallus_gallus-5.0", 86, 10**9),)),
+    "zebrafish": ("danio_rerio", "vertebrates", False, (("GRCz11", 92, 10**9),)),
+    "danio_rerio": ("danio_rerio", "vertebrates", False, (("GRCz11", 92, 10**9),)),
+    "macaque": ("macaca_fascicularis", "vertebrates", False, (("Macaca_fascicularis_6.0", 103, 10**9),)),
+    "rhesus": ("macaca_mulatta", "vertebrates", False, (("Mmul_10", 75, 10**9),)),
+    "rabbit": ("oryctolagus_cuniculus", "vertebrates", False, (("OryCun2.0", 75, 10**9),)),
+    "pig": ("sus_scrofa", "vertebrates", False, (("Sscrofa11.1", 75, 10**9),)),
+    "fruitfly": ("drosophila_melanogaster", "metazoa", True, (("BDGP6.32", 103, 10**9),)),
+    "drosophila": ("drosophila_melanogaster", "metazoa", True, (("BDGP6.32", 103, 10**9),)),
+    "drosophila_melanogaster": ("drosophila_melanogaster", "metazoa", True, (("BDGP6.32", 103, 10**9),)),
+    "worm": ("caenorhabditis_elegans", "metazoa", True, (("WBcel235", 71, 10**9),)),
+    "caenorhabditis_elegans": ("caenorhabditis_elegans", "metazoa", True, (("WBcel235", 71, 10**9),)),
+    "yeast": ("saccharomyces_cerevisiae", "fungi", False, (("R64-1-1", 76, 10**9),)),
+    "saccharomyces_cerevisiae": ("saccharomyces_cerevisiae", "fungi", False, (("R64-1-1", 76, 10**9),)),
+    "arabidopsis": ("arabidopsis_thaliana", "plants", True, (("TAIR10", 40, 10**9),)),
+    "arabidopsis_thaliana": ("arabidopsis_thaliana", "plants", True, (("TAIR10", 40, 10**9),)),
+    "rice": ("oryza_sativa", "plants", True, (("IRGSP-1.0", 40, 10**9),)),
+    "oryza_sativa": ("oryza_sativa", "plants", True, (("IRGSP-1.0", 40, 10**9),)),
+    "wheat": ("triticum_aestivum", "plants", True, (("IWGSC", 40, 10**9),)),
+    "maize": ("zea_mays", "plants", True, (("Zm-B73-REFERENCE-NAM-5.0", 54, 10**9),)),
+    "corn": ("zea_mays", "plants", True, (("Zm-B73-REFERENCE-NAM-5.0", 54, 10**9),)),
+    "tomato": ("solanum_lycopersicum", "plants", True, (("SL3.0", 42, 10**9),)),
+    "soybean": ("glycine_max", "plants", True, (("Glycine_max_v2.1", 43, 10**9),)),
+    "fission_yeast": ("schizosaccharomyces_pombe", "fungi", True, (("ASM294v2", 40, 10**9),)),
+    "aspergillus": ("aspergillus_nidulans", "fungi", True, (("ASM1142v1", 40, 10**9),)),
+    "candida": ("candida_albicans", "fungi", True, (("GCA000182965v3", 40, 10**9),)),
+    "mosquito": ("anopheles_gambiae", "metazoa", True, (("AgamP4", 40, 10**9),)),
+    "plasmodium": ("plasmodium_falciparum", "protists", True, (("ASM276v2", 40, 10**9),)),
+    "toxoplasma": ("toxoplasma_gondii", "protists", True, (("TGA4", 40, 10**9),)),
 }
 
 
@@ -95,31 +120,57 @@ def ensembl_gtf_url(species: str, version: str) -> str:
     """Return an Ensembl GTF URL for a species and release."""
 
     species_key = species.lower().replace(" ", "_")
-    latin_name, reference = _ENSEMBL_SPECIES.get(species_key, (species_key, None))
+    metadata = _ENSEMBL_SPECIES.get(species_key)
+    if metadata is None:
+        raise ValueError(
+            "Unknown Ensembl species {!r}; use a supported common or latin name.".format(
+                species
+            )
+        )
+    latin_name, division, genomes, references = metadata
     release = str(version).lower().replace("release-", "", 1)
     if release in {"def", "default", "latest"}:
-        listing_url = "https://ftp.ensembl.org/pub/current_gtf/{}/".format(latin_name)
-        request = urllib.request.Request(
-            listing_url, headers={"User-Agent": "sjcab-peak2anno-db"}
-        )
-        with urllib.request.urlopen(request, timeout=120) as response:
-            listing = response.read().decode("utf-8", "replace")
-        matches = re.findall(r'href="([^\"]+\\.gtf\\.gz)"', listing, re.IGNORECASE)
-        if not matches:
-            raise ValueError("No current Ensembl GTF found for {!r}.".format(species))
-        return listing_url + matches[0]
+        release = str(_latest_ensembl_release(genomes))
     if not release.isdigit():
         raise ValueError(
             "Ensembl release must be an integer or def, got {!r}.".format(version)
         )
+    release_number = int(release)
+    reference = next(
+        (name for name, first, last in references if first <= release_number <= last),
+        None,
+    )
     if reference is None:
         raise ValueError(
-            "Unknown Ensembl assembly for {!r}; use a known species name or --url.".format(species)
+            "No Ensembl reference assembly is defined for {!r} release {}.".format(
+                species, release
+            )
         )
     filename = "{}.{}.{}.gtf.gz".format(latin_name.capitalize(), reference, release)
+    if genomes:
+        return "https://ftp.ensemblgenomes.ebi.ac.uk/pub/release-{}/{}/gtf/{}/{}".format(
+            release, division, latin_name, filename
+        )
     return "https://ftp.ensembl.org/pub/release-{}/gtf/{}/{}".format(
         release, latin_name, filename
     )
+
+
+def _latest_ensembl_release(genomes: bool) -> int:
+    server = (
+        "https://ftp.ensemblgenomes.ebi.ac.uk"
+        if genomes
+        else "https://ftp.ensembl.org"
+    )
+    request = urllib.request.Request(
+        server + "/pub/", headers={"User-Agent": "sjcab-peak2anno-db"}
+    )
+    with urllib.request.urlopen(request, timeout=120) as response:
+        listing = response.read().decode("utf-8", "replace")
+    releases = [int(value) for value in re.findall(r'href="release-(\d+)/', listing)]
+    if not releases:
+        raise ValueError("Unable to determine the latest Ensembl release.")
+    return max(releases)
 
 
 def gencode_bed_filename(
