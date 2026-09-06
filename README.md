@@ -36,30 +36,35 @@ sets are generated:
 The `def` directory points to the registry-defined default version for each
 species, not necessarily the newest parsed GENCODE release.
 
-### `install-gencode-bed` / `download-gencode-bed`
+### `install-bed` / `download-bed`
 
 `install-gencode-bed` installs the package's configured GENCODE BED set into the
 user data directory. `download-gencode-bed` processes one species/version into a
 chosen output directory.
 
 ```bash
-sjcab-peak2anno-db install-gencode-bed
-sjcab-peak2anno-db install-gencode-bed -d /path/to/sjcab_peak2anno_db
-sjcab-peak2anno-db install-gencode-bed --overwrite
+sjcab-peak2anno-db install-bed
+sjcab-peak2anno-db install-bed -d /path/to/sjcab_peak2anno_db
+sjcab-peak2anno-db install-bed --overwrite
 
-sjcab-peak2anno-db download-gencode-bed hg38 v31 -o annotations
-sjcab-peak2anno-db download-gencode-bed hg19 v31lift37 -o annotations
-sjcab-peak2anno-db download-gencode-bed mm10 vM22 -g gencode.vM22.annotation.gtf.gz -o annotations
+sjcab-peak2anno-db download-bed hg38 v31 -o annotations
+sjcab-peak2anno-db download-bed hg19 v31lift37 -o annotations
+sjcab-peak2anno-db download-bed mm10 vM22 -g gencode.vM22.annotation.gtf.gz -o annotations
+sjcab-peak2anno-db download-bed human 100 --source ensembl -o annotations
+sjcab-peak2anno-db download-bed human def --source ensembl -o annotations
 ```
 
-`install-gencode-bed` reuses existing generated files by default. Use
+`install-bed` reuses existing generated files by default. Use
 `--overwrite` when you intentionally want to regenerate the whole installed BED
 layout.
 
-`download-gencode-bed` downloads or reuses the expected GTF. It first checks for
+`download-bed` downloads or reuses the expected GTF. It first checks for
 the GTF under the output directory, then under the current working directory,
 before downloading. Use `--gtf-path`/`-g` to force a specific local GTF or
-`--url`/`-u` to use a custom URL.
+`--url`/`-u` to use a custom URL. Use `--source ensembl` for species not covered
+by the bundled GENCODE registry. Its version is the Ensembl release number
+(`100`, for example), or `def` for the latest GTF listed by Ensembl. The same
+option is available on `download-feature`.
 
 Default layout:
 
@@ -83,30 +88,41 @@ db.write_tes("all.gene.bed", "all.tes.bed")
 db.write_deduplong("all.gene.bed", "deduplong.gene.bed")
 ```
 
-### `dedup-gencode-bed` / `filter-gencode-bed`
+### `dedup-bed` / `filter-bed`
 
 Both commands select one isoform per gene from an all-isoform GENCODE BED and
 write `{prefix}.gene.bed`, `{prefix}.tss.bed`, and `{prefix}.tes.bed`.
+
+The default `dedup-gencode-bed` selector is `longcol5`: it selects the isoform
+with the largest numeric BED column 5. Use `long` to select by interval length
+(`end - start`):
 
 `dedup-gencode-bed` falls back to the longest isoform for genes without selector
 support. `filter-gencode-bed` uses the same selector logic but omits genes
 without selector support.
 
 ```bash
-sjcab-peak2anno-db dedup-gencode-bed hg38 v31 -m peak -i h3k4me3_peaks.bed -o annotations
-sjcab-peak2anno-db dedup-gencode-bed mm10 vM22 -m isoID -i isoforms.txt -K ensid -o annotations
-sjcab-peak2anno-db filter-gencode-bed -b annotations/bed/hg38/v31/all.gene.bed -m perover -i active_chromhmm.bed -o annotations
-sjcab-peak2anno-db filter-gencode-bed hg38 v31 -m isoexp -i isoform_expression.tsv --exclusive -o annotations
+sjcab-peak2anno-db dedup-bed hg38 v31 -b all.gene.bed -o annotations
+sjcab-peak2anno-db dedup-bed hg38 v31 -m long -b all.gene.bed -o annotations
+sjcab-peak2anno-db dedup-bed hg38 v31 -m peak -i h3k4me3_peaks.bed -o annotations
+sjcab-peak2anno-db dedup-bed mm10 vM22 -m isoID -i isoforms.txt -K ensid -o annotations
+sjcab-peak2anno-db filter-bed -b annotations/bed/hg38/v31/all.gene.bed -m perover -i active_chromhmm.bed -o annotations
+sjcab-peak2anno-db filter-bed hg38 v31 -m isoexp -i isoform_expression.tsv --exclusive -o annotations
 ```
 
 Selection methods:
 
+- `longcol5`: no selector is needed; select the isoform with the largest
+  numeric value in BED column 5. This is the default for `dedup-gencode-bed`.
+- `long`: no selector is needed; select the isoform with the largest `end - start`.
 - `peak`: selector is a peak BED file with peak score in column 5; the isoform
-  whose TSS +/- promoter window has the highest peak score is selected.
+  whose TSS +/- promoter window has the highest peak score is selected. Text
+  selectors are also accepted, for example `chr1:100-200 10`.
 - `isoID`: selector is a transcript ID list, one ID per line.
 - `isoexp`: selector is a two-column table: transcript ID, then expression.
 - `perover`: selector is a BED file, often user-filtered ChromHMM active states;
-  the isoform promoter with the highest percent overlap is selected.
+  the isoform promoter with the highest percent overlap is selected. Text
+  selectors are also accepted, for example `chr1:100-200` or `chr1_100_200`.
 
 Defaults and naming:
 
@@ -116,6 +132,9 @@ Defaults and naming:
   match each other, and any BED overlap counts.
 - `--exclusive` requires exact transcript ID matches for `isoID`/`isoexp` and
   BED features fully contained inside the promoter for `peak`/`perover`.
+- Text `peak`/`perover` selectors may have a header or no header. Region strings
+  accept the common `sjcab_peak2anno` delimiters, including `:`, `-`, `_`, `/`,
+  `;`, and `,`.
 - Isoforms are grouped by gene symbol by default; use `--gene-key ensid` to
   group by Ensembl/GENCODE gene ID.
 - Species/version lookup writes prefixes such as
@@ -167,20 +186,20 @@ print(db.path("hg38", "gene"))
 GENCODE feature resources are CAB-style merged region BEDs derived from GTF and
 gene BED input. The default prefix is the promoter size label, usually `2kb`.
 
-### `install-gencode-feature` / `download-gencode-feature`
+### `install-feature` / `download-feature`
 
 `install-gencode-feature` installs default feature builds into the user data
 directory. `download-gencode-feature` writes feature files into a staging/output
 directory.
 
 ```bash
-sjcab-peak2anno-db install-gencode-feature all all
-sjcab-peak2anno-db install-gencode-feature hg38 v31
-sjcab-peak2anno-db install-gencode-feature hg38 v31 -o feature_downloads
+sjcab-peak2anno-db install-feature all all
+sjcab-peak2anno-db install-feature hg38 v31
+sjcab-peak2anno-db install-feature hg38 v31 -o feature_downloads
 
-sjcab-peak2anno-db download-gencode-feature hg38 v31 -o feature_downloads
-sjcab-peak2anno-db download-gencode-feature all all -o feature_downloads
-sjcab-peak2anno-db download-gencode-feature hg38 v31 -o feature_downloads -p 2kb -D 50kb -e 2kb
+sjcab-peak2anno-db download-feature hg38 v31 -o feature_downloads
+sjcab-peak2anno-db download-feature all all -o feature_downloads
+sjcab-peak2anno-db download-feature hg38 v31 -o feature_downloads -p 2kb -D 50kb -e 2kb
 ```
 
 `install-gencode-feature -o DIR` reuses preprocessed feature files from `DIR`
@@ -428,18 +447,18 @@ sjcab-peak2anno-db install gencode-bed gencode-feature blacklists cgi
 sjcab-peak2anno-db install -c gencode-bed -c gencode-feature
 sjcab-peak2anno-db install --overwrite
 
-sjcab-peak2anno-db install-gencode-bed
-sjcab-peak2anno-db download-gencode-bed hg38 v31 -o annotations
-sjcab-peak2anno-db download-gencode-bed mm10 vM22 -g gencode.vM22.annotation.gtf.gz -o annotations
-sjcab-peak2anno-db dedup-gencode-bed hg38 v31 -m peak -i h3k4me3_peaks.bed -o annotations
-sjcab-peak2anno-db dedup-gencode-bed mm10 vM22 -m isoID -i isoforms.txt -K ensid -o annotations
-sjcab-peak2anno-db filter-gencode-bed -b annotations/bed/hg38/v31/all.gene.bed -m perover -i active_chromhmm.bed -o annotations
-sjcab-peak2anno-db filter-gencode-bed hg38 v31 -m isoexp -i isoform_expression.tsv --exclusive -o annotations
+sjcab-peak2anno-db install-bed
+sjcab-peak2anno-db download-bed hg38 v31 -o annotations
+sjcab-peak2anno-db download-bed mm10 vM22 -g gencode.vM22.annotation.gtf.gz -o annotations
+sjcab-peak2anno-db dedup-bed hg38 v31 -m peak -i h3k4me3_peaks.bed -o annotations
+sjcab-peak2anno-db dedup-bed mm10 vM22 -m isoID -i isoforms.txt -K ensid -o annotations
+sjcab-peak2anno-db filter-bed -b annotations/bed/hg38/v31/all.gene.bed -m perover -i active_chromhmm.bed -o annotations
+sjcab-peak2anno-db filter-bed hg38 v31 -m isoexp -i isoform_expression.tsv --exclusive -o annotations
 
-sjcab-peak2anno-db install-gencode-feature all all
-sjcab-peak2anno-db install-gencode-feature hg38 v31 -o feature_downloads
-sjcab-peak2anno-db download-gencode-feature hg38 v31 -o feature_downloads
-sjcab-peak2anno-db download-gencode-feature all all -o feature_downloads
+sjcab-peak2anno-db install-feature all all
+sjcab-peak2anno-db install-feature hg38 v31 -o feature_downloads
+sjcab-peak2anno-db download-feature hg38 v31 -o feature_downloads
+sjcab-peak2anno-db download-feature all all -o feature_downloads
 
 sjcab-peak2anno-db install-chromhmm -m 18 -G hg19 -i E001,E063
 sjcab-peak2anno-db install-chromhmm -m 18 -G hg38 -i E063

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Mapping, Optional, Sequence, Tuple, Union
@@ -13,7 +14,8 @@ from ._registry import path as registry_path
 
 PathLike = Union[str, os.PathLike]
 
-DEDUP_METHODS = ("peak", "isoID", "isoexp", "perover")
+DEDUP_METHODS = ("longcol5", "long", "peak", "isoID", "isoexp", "perover")
+REGION_RE = re.compile(r"^(.+?)[\:\*\-=/\^;_%\$,](\d+)[\:\*\-=/\^;_%\$,](\d+)$")
 
 
 @dataclass(frozen=True)
@@ -32,8 +34,8 @@ class _IsoformRecord:
 
 
 def dedup_gencode_bed(
-    method: str,
-    selector: PathLike,
+    method: str = "longcol5",
+    selector: Optional[PathLike] = None,
     output_dir: PathLike = ".",
     gene_bed: Optional[PathLike] = None,
     species: Optional[str] = None,
@@ -46,7 +48,9 @@ def dedup_gencode_bed(
 ) -> Mapping[str, Path]:
     """Keep one isoform per gene based on a selector file.
 
-    ``method`` is one of ``peak``, ``isoID``, ``isoexp``, or ``perover``.
+    ``method`` is one of ``longcol5``, ``long``, ``peak``, ``isoID``,
+    ``isoexp``, or ``perover``. ``longcol5`` is the default length selector;
+    it uses BED column 5. ``long`` uses ``end - start`` and needs no selector.
     Genes with no selected/overlapping isoform fall back to the longest isoform.
     Use :func:`filter_gencode_bed` to omit those genes instead.
     """
@@ -70,7 +74,7 @@ def dedup_gencode_bed(
 
 def filter_gencode_bed(
     method: str,
-    selector: PathLike,
+    selector: Optional[PathLike] = None,
     output_dir: PathLike = ".",
     gene_bed: Optional[PathLike] = None,
     species: Optional[str] = None,
@@ -127,13 +131,25 @@ def _select_gencode_bed(
     records_by_gene = _group_by_gene(records)
     promoter = _parse_bp(promoter_bp)
 
-    if selected_method == "peak":
+    if selected_method == "longcol5":
+        scores = _score_length(records, use_column_five=True)
+    elif selected_method == "long":
+        scores = _score_length(records, use_column_five=False)
+    elif selected_method == "peak":
+        if selector is None:
+            raise ValueError("peak requires a selector file.")
         scores = _score_peak(records, selector, promoter, inclusive)
     elif selected_method == "perover":
+        if selector is None:
+            raise ValueError("perover requires a selector file.")
         scores = _score_perover(records, selector, promoter, inclusive)
     elif selected_method == "isoID":
+        if selector is None:
+            raise ValueError("isoID requires a selector file.")
         scores = _score_iso_ids(records, selector, inclusive)
     else:
+        if selector is None:
+            raise ValueError("isoexp requires a selector file.")
         scores = _score_iso_expression(records, selector, inclusive)
 
     selected = []
@@ -293,6 +309,24 @@ def _score_iso_ids(
     return scores
 
 
+def _score_length(
+    records: Sequence[_IsoformRecord],
+    use_column_five: bool,
+) -> Mapping[int, float]:
+    scores = {}  # type: Dict[int, float]
+    for record in records:
+        if use_column_five:
+            try:
+                scores[record.order] = float(record.fields[4])
+            except (IndexError, ValueError) as exc:
+                raise ValueError(
+                    "longcol5 requires a numeric BED column 5 for every isoform."
+                ) from exc
+        else:
+            scores[record.order] = float(record.end - record.start)
+    return scores
+
+
 def _score_iso_expression(
     records: Sequence[_IsoformRecord],
     selector: PathLike,
@@ -391,29 +425,22 @@ def _read_scored_bed(
     bed_path: PathLike,
 ) -> Mapping[str, List[Tuple[int, int, float]]]:
     scored = {}  # type: Dict[str, List[Tuple[int, int, float]]]
-    with Path(bed_path).expanduser().open("r", encoding="utf-8") as handle:
-        for line_number, line in enumerate(handle, start=1):
-            if not line.strip() or line.startswith("#"):
-                continue
-            fields = line.rstrip("\n").split("\t")
-            if len(fields) < 5:
-                raise ValueError(
-                    "{}:{} must have at least 5 BED columns for peak score.".format(
-                        bed_path, line_number
-                    )
+    for line_number, fields in _iter_selector_fields(bed_path):
+        try:
+            chrom, start, end = _selector_coordinates(fields, bed_path, line_number)
+            score = (
+                float(fields[4])
+                if len(fields) >= 5 and _is_bed_row(fields)
+                else _text_score(fields)
+            )
+        except (IndexError, ValueError) as exc:
+            raise ValueError(
+                "{}:{} has invalid interval or peak score.".format(
+                    bed_path, line_number
                 )
-            try:
-                start = int(fields[1])
-                end = int(fields[2])
-                score = float(fields[4])
-            except ValueError as exc:
-                raise ValueError(
-                    "{}:{} has invalid BED start/end or score.".format(
-                        bed_path, line_number
-                    )
-                ) from exc
-            if end > start:
-                scored.setdefault(fields[0], []).append((start, end, score))
+            ) from exc
+        if end > start:
+            scored.setdefault(chrom, []).append((start, end, score))
     return _sort_interval_map(scored)
 
 
@@ -421,27 +448,83 @@ def _read_bed(
     bed_path: PathLike,
 ) -> Mapping[str, List[Tuple[int, int]]]:
     intervals = {}  # type: Dict[str, List[Tuple[int, int]]]
-    with Path(bed_path).expanduser().open("r", encoding="utf-8") as handle:
+    for line_number, fields in _iter_selector_fields(bed_path):
+        try:
+            chrom, start, end = _selector_coordinates(fields, bed_path, line_number)
+        except (IndexError, ValueError) as exc:
+            raise ValueError(
+                "{}:{} has invalid interval.".format(bed_path, line_number)
+            ) from exc
+        if end > start:
+            intervals.setdefault(chrom, []).append((start, end))
+    return _sort_interval_map(intervals)
+
+
+def _iter_selector_fields(selector: PathLike) -> Iterable[Tuple[int, List[str]]]:
+    with Path(selector).expanduser().open("r", encoding="utf-8") as handle:
+        header_skipped = False
         for line_number, line in enumerate(handle, start=1):
             if not line.strip() or line.startswith("#"):
                 continue
-            fields = line.rstrip("\n").split("\t")
-            if len(fields) < 3:
-                raise ValueError(
-                    "{}:{} must have at least 3 BED columns.".format(
-                        bed_path, line_number
-                    )
-                )
-            try:
-                start = int(fields[1])
-                end = int(fields[2])
-            except ValueError as exc:
-                raise ValueError(
-                    "{}:{} has invalid BED start/end.".format(bed_path, line_number)
-                ) from exc
-            if end > start:
-                intervals.setdefault(fields[0], []).append((start, end))
-    return _sort_interval_map(intervals)
+            fields = line.rstrip("\n").split("\t") if "\t" in line else line.split()
+            if not header_skipped and not _looks_like_interval(fields):
+                header_skipped = True
+                continue
+            header_skipped = True
+            if _looks_like_interval(fields):
+                yield line_number, fields
+
+
+def _looks_like_interval(fields: Sequence[str]) -> bool:
+    if len(fields) >= 3:
+        try:
+            int(fields[1])
+            int(fields[2])
+            return True
+        except ValueError:
+            pass
+    return bool(fields) and REGION_RE.match(fields[0]) is not None
+
+
+def _is_bed_row(fields: Sequence[str]) -> bool:
+    if len(fields) < 3:
+        return False
+    try:
+        int(fields[1])
+        int(fields[2])
+    except ValueError:
+        return False
+    return True
+
+
+def _selector_coordinates(
+    fields: Sequence[str],
+    selector: PathLike,
+    line_number: int,
+) -> Tuple[str, int, int]:
+    if _is_bed_row(fields):
+        try:
+            return fields[0], int(fields[1]), int(fields[2])
+        except ValueError:
+            pass
+    if not fields:
+        raise ValueError("empty selector row")
+    match = REGION_RE.match(fields[0])
+    if match is None:
+        raise ValueError("{}:{} is not a region".format(selector, line_number))
+    chrom, start, end = match.groups()
+    return chrom, int(start), int(end)
+
+
+def _text_score(fields: Sequence[str]) -> float:
+    if len(fields) < 2:
+        return 1.0
+    for value in fields[1:]:
+        try:
+            return float(value)
+        except ValueError:
+            continue
+    return 1.0
 
 
 def _sort_interval_map(intervals_by_chrom: Mapping[str, List[Tuple]]) -> Mapping:
@@ -539,6 +622,11 @@ def _merge_intervals(intervals: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
 
 def _normalize_method(method: str) -> str:
     aliases = {
+        "longcol5": "longcol5",
+        "long-col5": "longcol5",
+        "long_col5": "longcol5",
+        "long": "long",
+        "length": "long",
         "peak": "peak",
         "peaks": "peak",
         "isoid": "isoID",
@@ -590,7 +678,13 @@ def _parse_bp(value: Union[int, str]) -> int:
         return value
     text = value.strip().lower()
     multiplier = 1
-    if text.endswith("kb"):
+    if text.endswith("mb"):
+        multiplier = 1000000
+        text = text[:-2]
+    elif text.endswith("m"):
+        multiplier = 1000000
+        text = text[:-1]
+    elif text.endswith("kb"):
         multiplier = 1000
         text = text[:-2]
     elif text.endswith("k"):

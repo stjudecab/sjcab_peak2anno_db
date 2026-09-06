@@ -136,6 +136,7 @@ def download_gencode_feature(
     overwrite: bool = True,
     log_data_dir: Optional[PathLike] = None,
     progress: Optional[ProgressCallback] = None,
+    source: str = "gencode",
     *,
     gene_bed_output: Optional[PathLike] = None,
 ) -> Mapping[str, Path]:
@@ -158,6 +159,7 @@ def download_gencode_feature(
         overwrite=overwrite,
         log_data_dir=log_data_dir,
         progress=progress,
+        source=source,
     )
     report_progress(progress, "download-gencode-feature: GTF ready")
 
@@ -352,6 +354,7 @@ def _resolve_gtf_for_regions(
     overwrite: bool,
     log_data_dir: Optional[PathLike],
     progress: Optional[ProgressCallback],
+    source: str,
 ) -> Path:
     if gtf_path is not None:
         return Path(gtf_path).expanduser()
@@ -363,6 +366,7 @@ def _resolve_gtf_for_regions(
         overwrite=overwrite,
         log_data_dir=log_data_dir,
         progress=progress,
+        source=source,
     )
 
 
@@ -1165,7 +1169,13 @@ def _parse_bp(value: Union[int, str]) -> int:
         return value
     text = value.strip().lower()
     multiplier = 1
-    if text.endswith("kb"):
+    if text.endswith("mb"):
+        multiplier = 1000000
+        text = text[:-2]
+    elif text.endswith("m"):
+        multiplier = 1000000
+        text = text[:-1]
+    elif text.endswith("kb"):
         multiplier = 1000
         text = text[:-2]
     elif text.endswith("k"):

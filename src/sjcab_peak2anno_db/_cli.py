@@ -148,7 +148,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
 
     feature_install_parser = subparsers.add_parser(
-        "install-gencode-feature",
+        "install-feature",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         help="Install bundled GENCODE BEDs and downloaded feature annotations.",
         epilog=_GENCODE_HELP_EPILOG,
@@ -196,7 +196,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
 
     bed_install_parser = subparsers.add_parser(
-        "install-gencode-bed",
+        "install-bed",
         help="Install bundled GENCODE BEDs and derived TSS/TES files.",
     )
     bed_install_parser.add_argument("-d", "--data-dir", help="Generated annotation directory.")
@@ -236,7 +236,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
 
     gencode_parser = subparsers.add_parser(
-        "download-gencode-bed",
+        "download-bed",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         help="Download or reuse a GENCODE GTF and write organized BED files.",
         epilog=_GENCODE_HELP_EPILOG,
@@ -257,6 +257,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     gencode_parser.add_argument("-g", "--gtf-path", help="Use an existing local GTF.")
     gencode_parser.add_argument("-u", "--url", help="Override the default GTF URL.")
+    gencode_parser.add_argument(
+        "--source",
+        choices=("gencode", "ensembl"),
+        default="gencode",
+        help="Annotation source. Ensembl accepts numeric releases or def.",
+    )
     gencode_parser.add_argument(
         "-b",
         "--output-bed",
@@ -283,18 +289,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     _add_gencode_feature_parser(
         subparsers,
-        "download-gencode-feature",
+        "download-feature",
         "Download/convert GENCODE and write merged feature BED classes.",
     )
 
     _add_dedup_filter_parser(
         subparsers,
-        "dedup-gencode-bed",
+        "dedup-bed",
         "Select one isoform per gene and fall back to longest when unselected.",
     )
     _add_dedup_filter_parser(
         subparsers,
-        "filter-gencode-bed",
+        "filter-bed",
         "Select one isoform per gene and omit genes without selector support.",
     )
 
@@ -365,7 +371,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             )
             print(target)
             return 0
-        if args.command == "install-gencode-feature":
+        if args.command == "install-feature":
             feature_species, feature_version = _gencode_feature_install_scope(args)
             target = install_gencode_features(
                 data_dir=args.data_dir,
@@ -386,7 +392,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             )
             print(target)
             return 0
-        if args.command == "install-gencode-bed":
+        if args.command == "install-bed":
             target = install_gencode_beds(
                 data_dir=args.data_dir,
                 overwrite=args.overwrite,
@@ -402,7 +408,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             )
             print(target)
             return 0
-        if args.command == "download-gencode-bed":
+        if args.command == "download-bed":
             target = download_and_convert_gencode_gtf(
                 args.species,
                 args.version,
@@ -414,10 +420,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 gene_types=args.gene_type,
                 overwrite=not args.no_overwrite,
                 progress=_stderr_progress,
+                source=args.source,
             )
             print(target)
             return 0
-        if args.command == "download-gencode-feature":
+        if args.command == "download-feature":
             specs = _gencode_feature_specs(args.species, args.version)
             multi_spec = len(specs) > 1
             for feature_species, feature_version in specs:
@@ -444,6 +451,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     tes_bp=args.tes_bp,
                     overwrite=not args.no_overwrite,
                     progress=_stderr_progress,
+                    source=args.source,
                 )
                 for name in sorted(targets):
                     if multi_spec:
@@ -458,10 +466,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     else:
                         print("{}\t{}".format(name, targets[name]))
             return 0
-        if args.command in {"dedup-gencode-bed", "filter-gencode-bed"}:
+        if args.command in {"dedup-bed", "filter-bed"}:
             function = (
                 dedup_gencode_bed
-                if args.command == "dedup-gencode-bed"
+                if args.command == "dedup-bed"
                 else filter_gencode_bed
             )
             targets = function(
@@ -575,6 +583,12 @@ def _add_gencode_feature_parser(
         help="GENCODE version, for example v31, v31lift37, or vM23.",
     )
     parser.add_argument(
+        "--source",
+        choices=("gencode", "ensembl"),
+        default="gencode",
+        help="Annotation source. Ensembl accepts numeric releases or def.",
+    )
+    parser.add_argument(
         "-o",
         "--output-dir",
         default=".",
@@ -605,18 +619,16 @@ def _add_dedup_filter_parser(
         "--gene-bed",
         help="Input all-isoform gene BED. Overrides species/version lookup.",
     )
-    parser.add_argument(
-        "-m",
-        "--method",
-        required=True,
-        help="Selection method: peak, isoID, isoexp, or perover.",
-    )
+    method_help = "Selection method: longcol5, long, peak, isoID, isoexp, or perover."
+    if name == "dedup-bed":
+        parser.add_argument("-m", "--method", default="longcol5", help=method_help)
+    else:
+        parser.add_argument("-m", "--method", required=True, help=method_help)
     parser.add_argument(
         "-i",
         "--input",
         dest="selector",
-        required=True,
-        help="Selector file: peak BED, isoform ID list, expression table, or BED.",
+        help="Selector file; not needed for longcol5 or long.",
     )
     parser.add_argument(
         "-o",

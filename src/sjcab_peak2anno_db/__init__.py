@@ -43,6 +43,7 @@ from ._gencode import (
     gencode_bed_dir,
     gencode_bed_filename,
     gencode_gtf_url,
+    ensembl_gtf_url,
     regenerate_gencode_beds,
 )
 from ._install import (
@@ -158,6 +159,7 @@ __all__ = [
     "gencode_bed_filename",
     "gencode_feature_prefix",
     "gencode_gtf_url",
+    "ensembl_gtf_url",
     "install_blacklists",
     "install_cgi",
     "install_data",

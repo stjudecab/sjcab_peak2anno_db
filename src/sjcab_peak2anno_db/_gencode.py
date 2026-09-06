@@ -6,6 +6,7 @@ import gzip
 import os
 import re
 import shutil
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, Mapping, Optional, Tuple, Union
@@ -17,6 +18,20 @@ from ._download_log import record_download_url
 PathLike = Union[str, os.PathLike]
 
 _ATTRIBUTE_RE = re.compile(r'(\S+)\s+"([^"]*)"')
+_ENSEMBL_SPECIES = {
+    "human": ("homo_sapiens", "GRCh38"),
+    "homo_sapiens": ("homo_sapiens", "GRCh38"),
+    "mouse": ("mus_musculus", "GRCm38"),
+    "mus_musculus": ("mus_musculus", "GRCm38"),
+    "rat": ("rattus_norvegicus", "Rnor_6.0"),
+    "rattus_norvegicus": ("rattus_norvegicus", "Rnor_6.0"),
+    "zebrafish": ("danio_rerio", "GRCz11"),
+    "danio_rerio": ("danio_rerio", "GRCz11"),
+    "fruitfly": ("drosophila_melanogaster", "BDGP6.32"),
+    "drosophila_melanogaster": ("drosophila_melanogaster", "BDGP6.32"),
+    "worm": ("caenorhabditis_elegans", "WBcel235"),
+    "caenorhabditis_elegans": ("caenorhabditis_elegans", "WBcel235"),
+}
 
 
 @dataclass
@@ -76,6 +91,37 @@ def gencode_gtf_url(species: str, version: str) -> str:
     )
 
 
+def ensembl_gtf_url(species: str, version: str) -> str:
+    """Return an Ensembl GTF URL for a species and release."""
+
+    species_key = species.lower().replace(" ", "_")
+    latin_name, reference = _ENSEMBL_SPECIES.get(species_key, (species_key, None))
+    release = str(version).lower().replace("release-", "", 1)
+    if release in {"def", "default", "latest"}:
+        listing_url = "https://ftp.ensembl.org/pub/current_gtf/{}/".format(latin_name)
+        request = urllib.request.Request(
+            listing_url, headers={"User-Agent": "sjcab-peak2anno-db"}
+        )
+        with urllib.request.urlopen(request, timeout=120) as response:
+            listing = response.read().decode("utf-8", "replace")
+        matches = re.findall(r'href="([^\"]+\\.gtf\\.gz)"', listing, re.IGNORECASE)
+        if not matches:
+            raise ValueError("No current Ensembl GTF found for {!r}.".format(species))
+        return listing_url + matches[0]
+    if not release.isdigit():
+        raise ValueError(
+            "Ensembl release must be an integer or def, got {!r}.".format(version)
+        )
+    if reference is None:
+        raise ValueError(
+            "Unknown Ensembl assembly for {!r}; use a known species name or --url.".format(species)
+        )
+    filename = "{}.{}.{}.gtf.gz".format(latin_name.capitalize(), reference, release)
+    return "https://ftp.ensembl.org/pub/release-{}/gtf/{}/{}".format(
+        release, latin_name, filename
+    )
+
+
 def gencode_bed_filename(
     species: str, version: str, include_type: bool = True
 ) -> str:
@@ -102,12 +148,18 @@ def download_gencode_gtf(
     overwrite: bool = True,
     log_data_dir: Optional[PathLike] = None,
     progress: Optional[ProgressCallback] = None,
+    source: str = "gencode",
 ) -> Path:
-    """Download one GENCODE GTF file and return the local path."""
+    """Download one GENCODE or Ensembl GTF file and return the local path."""
 
     output = Path(output_dir).expanduser()
     output.mkdir(parents=True, exist_ok=True)
-    url = gtf_url or gencode_gtf_url(species, version)
+    if gtf_url:
+        url = gtf_url
+    elif source.lower() == "ensembl":
+        url = ensembl_gtf_url(species, version)
+    else:
+        url = gencode_gtf_url(species, version)
     filename = url.rstrip("/").split("/")[-1]
     destination = output / filename
 
@@ -215,6 +267,7 @@ def download_and_convert_gencode_gtf(
     overwrite: bool = True,
     log_data_dir: Optional[PathLike] = None,
     progress: Optional[ProgressCallback] = None,
+    source: str = "gencode",
 ) -> Path:
     """Download or reuse a GENCODE GTF and convert it to BED.
 
@@ -237,6 +290,7 @@ def download_and_convert_gencode_gtf(
             overwrite=overwrite,
             log_data_dir=log_data_dir,
             progress=progress,
+            source=source,
         )
     else:
         gtf_path = Path(gtf_path).expanduser()

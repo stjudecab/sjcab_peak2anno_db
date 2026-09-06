@@ -7,6 +7,8 @@ import sjcab_peak2anno_db._dedup as dedup
 import sjcab_peak2anno_db._download as download
 import sjcab_peak2anno_db._gencode as gencode
 import sjcab_peak2anno_db._install as install
+import sjcab_peak2anno_db._regions as regions
+from sjcab_peak2anno_db._gencode import ensembl_gtf_url
 import sjcab_peak2anno_db._segway as segway
 
 
@@ -228,7 +230,7 @@ def test_install_gencode_bed_cli_reuses_existing_files_by_default(
 
     monkeypatch.setattr(cli, "install_gencode_beds", fake_install)
 
-    assert cli.main(["install-gencode-bed", "-d", str(tmp_path)]) == 0
+    assert cli.main(["install-bed", "-d", str(tmp_path)]) == 0
     assert called == {"data_dir": str(tmp_path), "overwrite": False}
 
 
@@ -244,7 +246,7 @@ def test_install_gencode_bed_cli_accepts_explicit_overwrite(
 
     monkeypatch.setattr(cli, "install_gencode_beds", fake_install)
 
-    assert cli.main(["install-gencode-bed", "-d", str(tmp_path), "--overwrite"]) == 0
+    assert cli.main(["install-bed", "-d", str(tmp_path), "--overwrite"]) == 0
     assert called == {"data_dir": str(tmp_path), "overwrite": True}
 
 
@@ -259,7 +261,7 @@ def test_download_gencode_bed_accepts_short_output_dir(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "download_and_convert_gencode_gtf", fake_download)
 
     assert (
-        cli.main(["download-gencode-bed", "hg38", "v31", "-o", str(tmp_path)])
+        cli.main(["download-bed", "hg38", "v31", "-o", str(tmp_path)])
         == 0
     )
     assert called["args"] == ("hg38", "v31", str(tmp_path))
@@ -297,7 +299,7 @@ def test_download_gencode_bed_defaults_to_current_output_dir(monkeypatch):
 
     monkeypatch.setattr(cli, "download_and_convert_gencode_gtf", fake_download)
 
-    assert cli.main(["download-gencode-bed", "hg38", "v31"]) == 0
+    assert cli.main(["download-bed", "hg38", "v31"]) == 0
     assert called["args"] == ("hg38", "v31", ".")
 
 
@@ -519,7 +521,7 @@ def test_download_gencode_feature_accepts_short_output_dir(monkeypatch, tmp_path
 
     assert cli.main(
         [
-            "download-gencode-feature",
+            "download-feature",
             "hg38",
             "v31",
             "-o",
@@ -542,7 +544,7 @@ def test_download_gencode_feature_accepts_all_defaults(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "download_gencode_feature", fake_download)
 
     assert (
-        cli.main(["download-gencode-feature", "all", "all", "-o", str(tmp_path)])
+        cli.main(["download-feature", "all", "all", "-o", str(tmp_path)])
         == 0
     )
     assert calls
@@ -567,7 +569,7 @@ def test_install_gencode_feature_accepts_feature_options(monkeypatch, tmp_path):
     assert (
         cli.main(
             [
-                "install-gencode-feature",
+                "install-feature",
                 "--species",
                 "hg38",
                 "--version",
@@ -610,7 +612,7 @@ def test_install_gencode_feature_accepts_positional_scope_and_output_dir(
     assert (
         cli.main(
             [
-                "install-gencode-feature",
+                "install-feature",
                 "hg38",
                 "all",
                 "-d",
@@ -639,7 +641,7 @@ def test_install_gencode_feature_accepts_all_defaults(monkeypatch, tmp_path):
 
     monkeypatch.setattr(cli, "install_gencode_features", fake_install)
 
-    assert cli.main(["install-gencode-feature", "--all", "-d", str(tmp_path)]) == 0
+    assert cli.main(["install-feature", "--all", "-d", str(tmp_path)]) == 0
     assert called["data_dir"] == str(tmp_path)
     assert called["overwrite"] is False
     assert called["species"] is None
@@ -660,7 +662,7 @@ def test_install_gencode_feature_accepts_explicit_overwrite(monkeypatch, tmp_pat
     assert (
         cli.main(
             [
-                "install-gencode-feature",
+                "install-feature",
                 "--all",
                 "-d",
                 str(tmp_path),
@@ -676,7 +678,7 @@ def test_install_gencode_feature_accepts_explicit_overwrite(monkeypatch, tmp_pat
 
 
 def test_install_gencode_feature_requires_scope(capsys):
-    assert cli.main(["install-gencode-feature"]) == 2
+    assert cli.main(["install-feature"]) == 2
     captured = capsys.readouterr()
     assert "requires species and version, or --all" in captured.err
 
@@ -1187,7 +1189,6 @@ def test_download_segway_uses_bundled_manifest_for_blood(monkeypatch, tmp_path):
     metadata_lines = (tmp_path / "segway" / "metadata.tsv").read_text(
         encoding="utf-8"
     ).splitlines()
-    log_text = (tmp_path / "download_urls.log").read_text(encoding="utf-8")
     assert (
         sum(
             "PERIPHERAL_BLOOD_MONONUCLEAR_PRIMARY_CELLS" in line
@@ -1934,6 +1935,44 @@ def test_dedup_gencode_bed_isoid_falls_back_to_longest(tmp_path):
     assert outputs["tes"].exists()
 
 
+def test_dedup_gencode_bed_long_selectors(tmp_path):
+    gene_bed = _write_isoform_selection_gene_bed(tmp_path)
+
+    col5_outputs = db.dedup_gencode_bed(
+        "longcol5", output_dir=tmp_path / "col5", gene_bed=gene_bed
+    )
+    interval_outputs = db.dedup_gencode_bed(
+        "long", output_dir=tmp_path / "interval", gene_bed=gene_bed
+    )
+    default_outputs = db.dedup_gencode_bed(
+        output_dir=tmp_path / "default", gene_bed=gene_bed
+    )
+
+    assert [
+        row.split("\t")[7]
+        for row in col5_outputs["gene"].read_text(encoding="utf-8").splitlines()
+    ] == ["TXA2.1", "TXB2.1"]
+    assert [
+        row.split("\t")[7]
+        for row in interval_outputs["gene"].read_text(encoding="utf-8").splitlines()
+    ] == ["TXA2.1", "TXB2.1"]
+    assert default_outputs["gene"].name == "all.deduplongcol5.gene.bed"
+
+
+def test_parse_bp_accepts_m_and_mb():
+    assert dedup._parse_bp("2m") == 2000000
+    assert dedup._parse_bp("1.5mb") == 1500000
+    assert regions._parse_bp("3m") == 3000000
+    assert regions._parse_bp("2mb") == 2000000
+
+
+def test_ensembl_gtf_url_uses_release_and_reference():
+    assert ensembl_gtf_url("human", "100") == (
+        "https://ftp.ensembl.org/pub/release-100/gtf/homo_sapiens/"
+        "Homo_sapiens.GRCh38.100.gtf.gz"
+    )
+
+
 def test_filter_gencode_bed_isoid_omits_unmatched_genes(tmp_path):
     gene_bed = _write_isoform_selection_gene_bed(tmp_path)
     ids = tmp_path / "ids.txt"
@@ -2049,6 +2088,24 @@ def test_dedup_gencode_bed_peak_uses_max_promoter_peak_score(tmp_path):
     assert [row.split("\t")[7] for row in rows] == ["TXA1.1", "TXB2.1"]
 
 
+def test_dedup_gencode_bed_peak_accepts_region_text(tmp_path):
+    gene_bed = _write_isoform_selection_gene_bed(tmp_path)
+    peaks = tmp_path / "peaks.txt"
+    peaks.write_text(
+        "region score\n"
+        "chr1:90-95 10\n"
+        "chr1_145_150 5\n",
+        encoding="utf-8",
+    )
+
+    outputs = db.dedup_gencode_bed(
+        "peak", peaks, tmp_path / "peak-text", gene_bed=gene_bed, promoter_bp=20
+    )
+
+    rows = outputs["gene"].read_text(encoding="utf-8").splitlines()
+    assert [row.split("\t")[7] for row in rows] == ["TXA1.1", "TXB2.1"]
+
+
 def test_filter_gencode_bed_perover_uses_promoter_overlap_percentage(tmp_path):
     gene_bed = _write_isoform_selection_gene_bed(tmp_path)
     active = tmp_path / "active.bed"
@@ -2064,6 +2121,19 @@ def test_filter_gencode_bed_perover_uses_promoter_overlap_percentage(tmp_path):
         tmp_path,
         gene_bed=gene_bed,
         promoter_bp=20,
+    )
+
+    rows = outputs["gene"].read_text(encoding="utf-8").splitlines()
+    assert [row.split("\t")[7] for row in rows] == ["TXA1.1"]
+
+
+def test_filter_gencode_bed_perover_accepts_region_text_without_header(tmp_path):
+    gene_bed = _write_isoform_selection_gene_bed(tmp_path)
+    active = tmp_path / "active.txt"
+    active.write_text("chr1:90-100\nchr1/145/146\n", encoding="utf-8")
+
+    outputs = db.filter_gencode_bed(
+        "perover", active, tmp_path / "perover-text", gene_bed=gene_bed, promoter_bp=20
     )
 
     rows = outputs["gene"].read_text(encoding="utf-8").splitlines()
@@ -2088,7 +2158,7 @@ def test_dedup_gencode_bed_cli_accepts_gene_bed(monkeypatch, tmp_path):
     assert (
         cli.main(
             [
-                "dedup-gencode-bed",
+                "dedup-bed",
                 "-b",
                 str(gene_bed),
                 "-m",
