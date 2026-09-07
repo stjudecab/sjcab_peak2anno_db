@@ -15,6 +15,7 @@ from ._gencode import (
     download_gencode_gtf,
     gencode_bed_filename,
 )
+from ._registry import user_data_dir
 
 PathLike = Union[str, os.PathLike]
 
@@ -137,6 +138,9 @@ def download_gencode_feature(
     log_data_dir: Optional[PathLike] = None,
     progress: Optional[ProgressCallback] = None,
     source: str = "auto",
+    cache_dir: Optional[PathLike] = None,
+    ucsc_annotation: str = "ens",
+    clean_cache: bool = False,
     *,
     gene_bed_output: Optional[PathLike] = None,
 ) -> Mapping[str, Path]:
@@ -160,6 +164,8 @@ def download_gencode_feature(
         log_data_dir=log_data_dir,
         progress=progress,
         source=source,
+        cache_dir=cache_dir,
+        ucsc_annotation=ucsc_annotation,
     )
     report_progress(progress, "download-gencode-feature: GTF ready")
 
@@ -203,6 +209,11 @@ def download_gencode_feature(
     )
     report_progress(progress, "download-gencode-feature: legacy BED files done")
     outputs["list"] = write_gencode_feature_list(outputs, target_dir, label)
+    if clean_cache and gtf_path is None:
+        cached_path = Path(gtf_for_regions)
+        cache_root = user_data_dir(cache_dir) / "cachegtf"
+        if cached_path.parent == cache_root and cached_path.exists():
+            cached_path.unlink()
     report_progress(progress, "download-gencode-feature: feature list done")
     outputs["gene_bed"] = Path(gene_bed).expanduser()
     report_progress(
@@ -210,6 +221,9 @@ def download_gencode_feature(
         "download-gencode-feature {} {}: done".format(species, version),
     )
     return outputs
+
+
+download_feature = download_gencode_feature
 
 
 def download_gencode_tss_flank_region_unions(
@@ -355,6 +369,8 @@ def _resolve_gtf_for_regions(
     log_data_dir: Optional[PathLike],
     progress: Optional[ProgressCallback],
     source: str,
+    cache_dir: Optional[PathLike],
+    ucsc_annotation: str,
 ) -> Path:
     if gtf_path is not None:
         return Path(gtf_path).expanduser()
@@ -367,6 +383,8 @@ def _resolve_gtf_for_regions(
         log_data_dir=log_data_dir,
         progress=progress,
         source=source,
+        cache_dir=cache_dir,
+        ucsc_annotation=ucsc_annotation,
     )
 
 

@@ -253,10 +253,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "-o",
         "--output-dir",
         default=".",
-        help="Directory for the downloaded GTF and generated BED layout.",
+        help="Directory for generated BED files. GTFs use the database cache.",
     )
+    gencode_parser.add_argument("-d", "--data-dir", help="Database/cache directory.")
     gencode_parser.add_argument("-g", "--gtf-path", help="Use an existing local GTF.")
     gencode_parser.add_argument("-u", "--url", help="Override the default GTF URL.")
+    gencode_parser.add_argument(
+        "--ucsc-source",
+        choices=("ens", "refseq"),
+        default="ens",
+        help="UCSC gene annotation when a UCSC build is selected.",
+    )
+    gencode_parser.add_argument(
+        "--clean-cache",
+        action="store_true",
+        help="Delete the downloaded GTF from cachegtf after conversion.",
+    )
     gencode_parser.add_argument(
         "-b",
         "--output-bed",
@@ -344,6 +356,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 overwrite=args.overwrite,
                 components=_install_components_from_args(args),
                 progress=_stderr_progress,
+                cache_dir=args.data_dir,
+                ucsc_annotation=args.ucsc_source,
+                clean_cache=args.clean_cache,
             )
             print(target)
             return 0
@@ -444,6 +459,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     tes_bp=args.tes_bp,
                     overwrite=not args.no_overwrite,
                     progress=_stderr_progress,
+                    cache_dir=args.data_dir,
+                    ucsc_annotation=args.ucsc_source,
+                    clean_cache=args.clean_cache,
                 )
                 for name in sorted(targets):
                     if multi_spec:
@@ -580,6 +598,7 @@ def _add_gencode_feature_parser(
         default=".",
         help="Directory for generated gene and feature BED files.",
     )
+    parser.add_argument("-d", "--data-dir", help="Database/cache directory.")
     _add_feature_generation_arguments(parser, include_output_dir=False)
 
 
@@ -672,6 +691,17 @@ def _add_feature_generation_arguments(
         )
     parser.add_argument("-g", "--gtf-path", help="Use an existing local GTF.")
     parser.add_argument("-u", "--url", help="Override the default GTF URL.")
+    parser.add_argument(
+        "--ucsc-source",
+        choices=("ens", "refseq"),
+        default="ens",
+        help="UCSC gene annotation when a UCSC build is selected.",
+    )
+    parser.add_argument(
+        "--clean-cache",
+        action="store_true",
+        help="Delete the downloaded GTF from cachegtf after conversion.",
+    )
     parser.add_argument(
         "-b",
         "--gene-bed",
