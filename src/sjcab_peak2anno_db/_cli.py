@@ -258,12 +258,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     gencode_parser.add_argument("-g", "--gtf-path", help="Use an existing local GTF.")
     gencode_parser.add_argument("-u", "--url", help="Override the default GTF URL.")
     gencode_parser.add_argument(
-        "--source",
-        choices=("gencode", "ensembl"),
-        default="gencode",
-        help="Annotation source. Ensembl accepts numeric releases or def.",
-    )
-    gencode_parser.add_argument(
         "-b",
         "--output-bed",
         help="Explicit single generated gene BED path.",
@@ -420,7 +414,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 gene_types=args.gene_type,
                 overwrite=not args.no_overwrite,
                 progress=_stderr_progress,
-                source=args.source,
             )
             print(target)
             return 0
@@ -451,7 +444,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     tes_bp=args.tes_bp,
                     overwrite=not args.no_overwrite,
                     progress=_stderr_progress,
-                    source=args.source,
                 )
                 for name in sorted(targets):
                     if multi_spec:
@@ -581,12 +573,6 @@ def _add_gencode_feature_parser(
     parser.add_argument(
         "version",
         help="GENCODE version, for example v31, v31lift37, or vM23.",
-    )
-    parser.add_argument(
-        "--source",
-        choices=("gencode", "ensembl"),
-        default="gencode",
-        help="Annotation source. Ensembl accepts numeric releases or def.",
     )
     parser.add_argument(
         "-o",
@@ -930,7 +916,7 @@ def _gencode_feature_install_scope(args: argparse.Namespace) -> tuple:
     if args.all:
         if args.species or args.version or args.species_option or args.version_option:
             raise ValueError(
-                "install-gencode-feature --all cannot be combined with "
+                "install-feature --all cannot be combined with "
                 "--species or --version."
             )
         return None, None
@@ -938,7 +924,7 @@ def _gencode_feature_install_scope(args: argparse.Namespace) -> tuple:
     version = args.version or args.version_option
     if not species or not version:
         raise ValueError(
-            "install-gencode-feature requires species and version, or --all."
+            "install-feature requires species and version, or --all."
         )
     return species, version
 
@@ -946,7 +932,7 @@ def _gencode_feature_install_scope(args: argparse.Namespace) -> tuple:
 def _gencode_feature_specs(species: str, version: str) -> tuple:
     if species.lower() == "all":
         if version.lower() != "all":
-            raise ValueError("download-gencode-feature all requires version all.")
+            raise ValueError("download-feature all requires version all.")
         return DEFAULT_GENCODE_FEATURE_SPECS
     if version.lower() == "all":
         return ((species, _gencode_default_feature_version(species)),)

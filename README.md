@@ -38,8 +38,8 @@ species, not necessarily the newest parsed GENCODE release.
 
 ### `install-bed` / `download-bed`
 
-`install-gencode-bed` installs the package's configured GENCODE BED set into the
-user data directory. `download-gencode-bed` processes one species/version into a
+`install-bed` installs the package's configured GENCODE BED set into the
+user data directory. `download-bed` processes one species/version into a
 chosen output directory.
 
 ```bash
@@ -50,8 +50,8 @@ sjcab-peak2anno-db install-bed --overwrite
 sjcab-peak2anno-db download-bed hg38 v31 -o annotations
 sjcab-peak2anno-db download-bed hg19 v31lift37 -o annotations
 sjcab-peak2anno-db download-bed mm10 vM22 -g gencode.vM22.annotation.gtf.gz -o annotations
-sjcab-peak2anno-db download-bed human 100 --source ensembl -o annotations
-sjcab-peak2anno-db download-bed human def --source ensembl -o annotations
+sjcab-peak2anno-db download-bed human 100
+sjcab-peak2anno-db download-bed human def
 ```
 
 `install-bed` reuses existing generated files by default. Use
@@ -61,21 +61,22 @@ layout.
 `download-bed` downloads or reuses the expected GTF. It first checks for
 the GTF under the output directory, then under the current working directory,
 before downloading. Use `--gtf-path`/`-g` to force a specific local GTF or
-`--url`/`-u` to use a custom URL. Use `--source ensembl` for species not covered
-by the bundled GENCODE registry. Its version is the Ensembl release number
+`--url`/`-u` to use a custom URL. Species not covered by the bundled GENCODE
+registry automatically use Ensembl. Its version is the Ensembl release number
 (`100`, for example), or `def` for the latest GTF listed by Ensembl. The same
-option is available on `download-feature`.
+automatic source selection is used by `download-feature`.
 
 For Ensembl Genomes, `def`, `default`, `current`, and `latest` read the release
 number from `https://ftp.ensemblgenomes.ebi.ac.uk/pub/VERSION`. Both those
 aliases and an explicit release such as `63` refresh
 `ensembl/def -> ensembl/63` in the selected database path.
 
-For an Ensembl Genomes species not built into the resolver, the command fetches
-`species.txt` once, caches only `species`, `division`, and `assembly` under
-`$SJCAB_PEAK2ANNO_DB_PATH/ensembl/def/species.txt` (or
-`~/.sjcab_peak2anno_db/ensembl/def/species.txt`), and uses those fields to form
-the release URL.
+For a species not built into the resolver, the command checks separate cached
+Ensembl Vertebrates and Ensembl Genomes catalogs, downloading the missing catalog
+only when needed. It caches only `species`, `division`, and `assembly`; release
+metadata is stored under `$SJCAB_PEAK2ANNO_DB_PATH/ensembl/{release}/` (or
+`~/.sjcab_peak2anno_db/ensembl/{release}/`). Detailed selector input examples are in
+[README.SELECTOR.md](README.SELECTOR.md).
 
 Default layout:
 
@@ -104,12 +105,12 @@ db.write_deduplong("all.gene.bed", "deduplong.gene.bed")
 Both commands select one isoform per gene from an all-isoform GENCODE BED and
 write `{prefix}.gene.bed`, `{prefix}.tss.bed`, and `{prefix}.tes.bed`.
 
-The default `dedup-gencode-bed` selector is `longcol5`: it selects the isoform
+The default `dedup-bed` selector is `longcol5`: it selects the isoform
 with the largest numeric BED column 5. Use `long` to select by interval length
 (`end - start`):
 
-`dedup-gencode-bed` falls back to the longest isoform for genes without selector
-support. `filter-gencode-bed` uses the same selector logic but omits genes
+`dedup-bed` falls back to the longest isoform for genes without selector
+support. `filter-bed` uses the same selector logic but omits genes
 without selector support.
 
 ```bash
@@ -124,7 +125,7 @@ sjcab-peak2anno-db filter-bed hg38 v31 -m isoexp -i isoform_expression.tsv --exc
 Selection methods:
 
 - `longcol5`: no selector is needed; select the isoform with the largest
-  numeric value in BED column 5. This is the default for `dedup-gencode-bed`.
+  numeric value in BED column 5. This is the default for `dedup-bed`.
 - `long`: no selector is needed; select the isoform with the largest `end - start`.
 - `peak`: selector is a peak BED file with peak score in column 5; the isoform
   whose TSS +/- promoter window has the highest peak score is selected. Text
@@ -199,8 +200,8 @@ gene BED input. The default prefix is the promoter size label, usually `2kb`.
 
 ### `install-feature` / `download-feature`
 
-`install-gencode-feature` installs default feature builds into the user data
-directory. `download-gencode-feature` writes feature files into a staging/output
+`install-feature` installs default feature builds into the user data
+directory. `download-feature` writes feature files into a staging/output
 directory.
 
 ```bash
@@ -213,11 +214,11 @@ sjcab-peak2anno-db download-feature all all -o feature_downloads
 sjcab-peak2anno-db download-feature hg38 v31 -o feature_downloads -p 2kb -D 50kb -e 2kb
 ```
 
-`install-gencode-feature -o DIR` reuses preprocessed feature files from `DIR`
+`install-feature -o DIR` reuses preprocessed feature files from `DIR`
 when `order.lst` and the expected feature BED files are already present. Like
-`download-gencode-bed`, feature generation reuses an existing expected GTF from
+`download-bed`, feature generation reuses an existing expected GTF from
 the output directory or current working directory before downloading.
-`install-gencode-feature` reuses existing generated files by default; pass
+`install-feature` reuses existing generated files by default; pass
 `--overwrite` to rebuild the installed GENCODE BED prerequisite and feature
 files.
 

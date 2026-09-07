@@ -1986,6 +1986,11 @@ def test_ensembl_gtf_url_uses_cached_genomes_species(monkeypatch, tmp_path):
         "bigelowiella_natans\tEnsemblProtists\tBigna1\n",
         encoding="utf-8",
     )
+    current_cache = tmp_path / "ensembl" / "species.txt"
+    current_cache.write_text(cache.read_text(encoding="utf-8"), encoding="utf-8")
+    (tmp_path / "ensembl" / "species_EnsemblVertebrates.txt").write_text(
+        "species\tdivision\tassembly\n", encoding="utf-8"
+    )
     assert ensembl_gtf_url("bigelowiella_natans", "63") == (
         "https://ftp.ensemblgenomes.ebi.ac.uk/pub/release-63/protists/gtf/"
         "bigelowiella_natans/Bigelowiella_natans.Bigna1.63.gtf.gz"

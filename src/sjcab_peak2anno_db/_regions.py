@@ -136,7 +136,7 @@ def download_gencode_feature(
     overwrite: bool = True,
     log_data_dir: Optional[PathLike] = None,
     progress: Optional[ProgressCallback] = None,
-    source: str = "gencode",
+    source: str = "auto",
     *,
     gene_bed_output: Optional[PathLike] = None,
 ) -> Mapping[str, Path]:

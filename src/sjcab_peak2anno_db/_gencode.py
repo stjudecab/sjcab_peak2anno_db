@@ -58,6 +58,20 @@ _ENSEMBL_SPECIES = {
     "plasmodium": ("plasmodium_falciparum", "protists", True, (("ASM276v2", 40, 10**9),)),
     "toxoplasma": ("toxoplasma_gondii", "protists", True, (("TGA4", 40, 10**9),)),
 }
+_ENSEMBL_CATALOGS = (
+    (
+        "vertebrates",
+        False,
+        "https://ftp.ebi.ac.uk/pub/ensembl/current/species_EnsemblVertebrates.txt",
+        "species_EnsemblVertebrates.txt",
+    ),
+    (
+        "genomes",
+        True,
+        "https://ftp.ensemblgenomes.ebi.ac.uk/pub/current/species.txt",
+        "species.txt",
+    ),
+)
 
 
 @dataclass
@@ -124,14 +138,17 @@ def ensembl_gtf_url(species: str, version: str) -> str:
     metadata = _ENSEMBL_SPECIES.get(species_key)
     release = str(version).lower().replace("release-", "", 1)
     if release in {"def", "default", "current", "latest"}:
-        release = str(_latest_ensembl_release(metadata[2] if metadata else True))
+        if metadata is not None:
+            release = str(_latest_ensembl_release(metadata[2]))
+        else:
+            metadata, release = _resolve_cached_ensembl_species(species)
     if not release.isdigit():
         raise ValueError(
             "Ensembl release must be an integer or def, got {!r}.".format(version)
         )
     release_number = int(release)
     if metadata is None:
-        metadata = _ensembl_genomes_species(species, release_number)
+        metadata = _resolve_cached_ensembl_species(species, release_number)[0]
     latin_name, division, genomes, references = metadata
     if genomes:
         _refresh_ensembl_default_link(release_number)
@@ -155,43 +172,73 @@ def ensembl_gtf_url(species: str, version: str) -> str:
     )
 
 
-def _ensembl_genomes_species(species: str, release: int):
-    """Resolve an unlisted species from the cached Ensembl Genomes index."""
-
-    cache_path = user_data_dir() / "ensembl" / str(release) / "species.txt"
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    if not cache_path.exists():
-        request = urllib.request.Request(
-            "https://ftp.ensemblgenomes.ebi.ac.uk/pub/release-{}/species.txt".format(
-                release
-            ),
-            headers={"User-Agent": "sjcab-peak2anno-db"},
-        )
-        with urllib.request.urlopen(request, timeout=120) as response:
-            rows = response.read().decode("utf-8", "replace").splitlines()
-        tmp_path = cache_path.with_name(cache_path.name + ".tmp")
-        with tmp_path.open("w", encoding="utf-8") as handle:
-            handle.write("species\tdivision\tassembly\n")
-            for row in rows:
-                if not row or row.startswith("#"):
-                    continue
-                fields = row.split("\t")
-                if len(fields) >= 5:
-                    handle.write("{}\t{}\t{}\n".format(fields[1], fields[2], fields[4]))
-        tmp_path.replace(cache_path)
-        _refresh_ensembl_species_cache_link(cache_path, release)
+def _resolve_cached_ensembl_species(species: str, release: Optional[int] = None):
+    """Resolve an unlisted species from separate Vertebrates/Genomes catalogs."""
 
     wanted = species.lower().replace(" ", "_")
+    root = user_data_dir() / "ensembl"
+    for catalog_name, genomes, current_url, filename in _ENSEMBL_CATALOGS:
+        cache_path = root / filename
+        if not cache_path.exists():
+            cache_path = _download_ensembl_species_catalog(current_url, root, filename)
+        match = _find_ensembl_species(cache_path, wanted, genomes)
+        if match is None:
+            continue
+        if release is None:
+            release = _latest_ensembl_release(genomes)
+        release_path = root / str(release) / filename
+        if genomes:
+            release_url = "https://ftp.ensemblgenomes.ebi.ac.uk/pub/release-{}/species.txt".format(
+                release
+            )
+            if not release_path.exists():
+                release_path = _download_ensembl_species_catalog(
+                    release_url, release_path.parent, filename
+                )
+            release_match = _find_ensembl_species(release_path, wanted, genomes)
+            if release_match is not None:
+                match = release_match
+        else:
+            release_path.parent.mkdir(parents=True, exist_ok=True)
+            if not release_path.exists():
+                shutil.copyfile(cache_path, release_path)
+        _refresh_ensembl_species_cache_link(release_path, release)
+        return match, str(release)
+    raise ValueError(
+        "Unknown Ensembl species {!r}; it was not found in the Ensembl catalogs.".format(
+            species
+        )
+    )
+
+
+def _download_ensembl_species_catalog(url: str, root: Path, filename: str) -> Path:
+    root.mkdir(parents=True, exist_ok=True)
+    request = urllib.request.Request(url, headers={"User-Agent": "sjcab-peak2anno-db"})
+    with urllib.request.urlopen(request, timeout=120) as response:
+        rows = response.read().decode("utf-8", "replace").splitlines()
+    destination = root / filename
+    tmp_path = destination.with_name(destination.name + ".tmp")
+    with tmp_path.open("w", encoding="utf-8") as handle:
+        handle.write("species\tdivision\tassembly\n")
+        for row in rows:
+            if not row or row.startswith("#"):
+                continue
+            fields = row.split("\t")
+            if len(fields) >= 5:
+                handle.write("{}\t{}\t{}\n".format(fields[1], fields[2], fields[4]))
+    tmp_path.replace(destination)
+    return destination
+
+
+def _find_ensembl_species(cache_path: Path, wanted: str, genomes: bool):
     with cache_path.open("r", encoding="utf-8") as handle:
         next(handle, None)
         for row in handle:
             fields = row.rstrip("\n").split("\t")
             if len(fields) == 3 and fields[0].lower() == wanted:
                 division = fields[1].replace("Ensembl", "").lower()
-                return fields[0], division, True, ((fields[2], 0, 10**9),)
-    raise ValueError(
-        "Unknown Ensembl species {!r}; it was not found in species.txt.".format(species)
-    )
+                return fields[0], division, genomes, ((fields[2], 0, 10**9),)
+    return None
 
 
 def _refresh_ensembl_species_cache_link(cache_path: Path, release: int) -> None:
@@ -283,7 +330,7 @@ def download_gencode_gtf(
     overwrite: bool = True,
     log_data_dir: Optional[PathLike] = None,
     progress: Optional[ProgressCallback] = None,
-    source: str = "gencode",
+    source: str = "auto",
 ) -> Path:
     """Download one GENCODE or Ensembl GTF file and return the local path."""
 
@@ -291,6 +338,11 @@ def download_gencode_gtf(
     output.mkdir(parents=True, exist_ok=True)
     if gtf_url:
         url = gtf_url
+    elif source.lower() == "auto":
+        source = "gencode" if species.lower() in {
+            "hg19", "hg38", "grch37", "grch38", "mm9", "mm10", "mm39",
+        } else "ensembl"
+        url = ensembl_gtf_url(species, version) if source == "ensembl" else gencode_gtf_url(species, version)
     elif source.lower() == "ensembl":
         url = ensembl_gtf_url(species, version)
     else:
@@ -402,7 +454,7 @@ def download_and_convert_gencode_gtf(
     overwrite: bool = True,
     log_data_dir: Optional[PathLike] = None,
     progress: Optional[ProgressCallback] = None,
-    source: str = "gencode",
+    source: str = "auto",
 ) -> Path:
     """Download or reuse a GENCODE GTF and convert it to BED.
 
