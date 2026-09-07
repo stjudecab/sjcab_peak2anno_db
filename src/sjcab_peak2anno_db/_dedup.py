@@ -706,3 +706,8 @@ def _field_or_empty(fields: Sequence[str], index: int) -> str:
 
 def _strip_version(identifier: str) -> str:
     return identifier.split(".", 1)[0] if identifier else ""
+
+
+# Short public names; retain the historical GENCODE names for compatibility.
+dedup_bed = dedup_gencode_bed
+filter_bed = filter_gencode_bed

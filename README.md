@@ -8,6 +8,7 @@ data defaults to `~/.sjcab_peak2anno_db`; override it with
 `SJCAB_PEAK2ANNO_DB_PATH` or with command-level `--data-dir`/`-d` flags.
 
 ```bash
+# Install the package and its default resource set.
 pip install sjcab_peak2anno_db
 
 export SJCAB_PEAK2ANNO_DB_PATH=/path/to/sjcab_peak2anno_db
@@ -43,6 +44,7 @@ user data directory. `download-bed` processes one species/version into a
 chosen output directory.
 
 ```bash
+# Install or regenerate annotation BED resources.
 sjcab-peak2anno-db install-bed
 sjcab-peak2anno-db install-bed -d /path/to/sjcab_peak2anno_db
 sjcab-peak2anno-db install-bed --overwrite
@@ -62,20 +64,21 @@ layout.
 `cachegtf` cache, then the output directory and current working directory,
 before downloading. Use `--gtf-path`/`-g` to force a specific local GTF or
 `--url`/`-u` to use a custom URL. Species not covered by the bundled GENCODE
-registry automatically try a matching UCSC short genome ID and then Ensembl.
-Its version is the Ensembl release number (`100`, for example), or `def` for
-the latest GTF listed by Ensembl. The same automatic source selection is used
-by `download-feature`.
+registry automatically try a matching UCSC short genome ID, then Ensembl
+Vertebrates, then Ensembl Genomes. Its version is the Ensembl release number
+(`100`, for example), or `def` for the latest GTF listed by Ensembl. The same
+automatic source selection is used by `download-feature`.
 
 `-o/--output-dir` defaults to the current working directory; it is not required.
 Downloaded GTFs are stored in `{data_dir}/cachegtf/`, where `{data_dir}` is
 `--data-dir`, `SJCAB_PEAK2ANNO_DB_PATH`, or `~/.sjcab_peak2anno_db`. Use
 `--clean-cache` to remove the GTF after its BED files have been generated.
 
-For Ensembl Genomes, `def`, `default`, `current`, and `latest` read the release
-number from `https://ftp.ebi.ac.uk/pub/ensemblgenomes/VERSION`. Both those
-aliases and an explicit release such as `63` refresh
-`ensembl/def -> ensembl/63` in the selected database path.
+For Ensembl releases, `def`, `default`, `current`, and `latest` resolve the
+current release metadata. The separate links are
+`{data_dir}/ensembl/vertebrates/def -> {release}` and
+`{data_dir}/ensembl/genomes/def -> {release}`. Ensembl Genomes determines its
+current release from `https://ftp.ebi.ac.uk/pub/ensemblgenomes/VERSION`.
 
 For a species not built into the resolver, the command checks separate cached
 catalogs at `{data_dir}/ensembl/vertebrates/species_EnsemblVertebrates.txt` and
@@ -83,8 +86,14 @@ catalogs at `{data_dir}/ensembl/vertebrates/species_EnsemblVertebrates.txt` and
 needed. Each catalog stores only `species`, `division`, and `assembly`. A
 release-specific reduced catalog is stored at
 `{data_dir}/ensembl/vertebrates/{release}/` or
-`{data_dir}/ensembl/genomes/{release}/`; for Ensembl Genomes,
-`{data_dir}/ensembl/def` points to `genomes/{release}`.
+`{data_dir}/ensembl/genomes/{release}/`; each catalog's `def` link points to
+its own release directory.
+
+For automatic GTF selection, the order is GENCODE, a recognized UCSC build
+with a UCSC GTF, Ensembl Vertebrates, then Ensembl Genomes. UCSC build IDs are
+cached in `{data_dir}/ucsc/gtf_builds.tsv` after reading the
+[UCSC downloads page](https://hgdownload.soe.ucsc.edu/downloads.html); an
+unrecognized build is never sent directly to a UCSC genes directory.
 
 Default layout:
 
@@ -125,11 +134,17 @@ Detailed selector input examples, including input and output BED content, are in
 [README.SELECTOR.md](README.SELECTOR.md).
 
 ```bash
+# Select one transcript per gene using the default column-5 selector.
 sjcab-peak2anno-db dedup-bed hg38 v31 -b all.gene.bed -o annotations
+# Select one transcript per gene using genomic interval length.
 sjcab-peak2anno-db dedup-bed hg38 v31 -m long -b all.gene.bed -o annotations
+# Select transcripts using peak scores around their TSS.
 sjcab-peak2anno-db dedup-bed hg38 v31 -m peak -i h3k4me3_peaks.bed -o annotations
+# Select transcript IDs explicitly.
 sjcab-peak2anno-db dedup-bed mm10 vM22 -m isoID -i isoforms.txt -K ensid -o annotations
+# Keep genes whose promoters overlap the selector file.
 sjcab-peak2anno-db filter-bed -b annotations/bed/hg38/v31/all.gene.bed -m perover -i active_chromhmm.bed -o annotations
+# Select by expression and require exact selector matches.
 sjcab-peak2anno-db filter-bed hg38 v31 -m isoexp -i isoform_expression.tsv --exclusive -o annotations
 ```
 
@@ -170,7 +185,7 @@ Python API:
 ```python
 import sjcab_peak2anno_db as db
 
-db.dedup_gencode_bed(
+db.dedup_bed(
     "peak",
     "h3k4me3_peaks.bed",
     output_dir="annotations",
@@ -178,7 +193,7 @@ db.dedup_gencode_bed(
     version="v31",
 )
 
-db.filter_gencode_bed(
+db.filter_bed(
     "perover",
     "active_chromhmm.bed",
     output_dir="annotations",
@@ -216,6 +231,7 @@ directory. `download-feature` writes feature files into a staging/output
 directory.
 
 ```bash
+# Install or generate merged feature BED resources.
 sjcab-peak2anno-db install-feature all all
 sjcab-peak2anno-db install-feature hg38 v31
 sjcab-peak2anno-db install-feature hg38 v31 -o feature_downloads
@@ -236,14 +252,19 @@ files.
 For UCSC short genome IDs, select the UCSC gene table when needed:
 
 ```bash
+# Use the UCSC RefSeq gene annotation for the T2T human build.
 sjcab-peak2anno-db download-bed hs1 1 --ucsc-source refseq
+# Use the UCSC RefSeq gene annotation for the alpaca build.
 sjcab-peak2anno-db download-bed vicPac2 1 --ucsc-source refseq
+# Use the UCSC Ensembl gene annotation for the yeast build.
 sjcab-peak2anno-db download-bed sacCer3 R64-1-1 --ucsc-source ens
 ```
 
 UCSC files are selected from `bigZips/genes/`; `ens` uses `ensGene` and
 `refseq` uses `ncbiRefSeq` or `refGene`. GENCODE is preferred when the genome
-has a configured GENCODE URL; otherwise Ensembl and UCSC are resolved automatically.
+has a configured GENCODE URL; otherwise recognized UCSC builds are tried before
+Ensembl Vertebrates and Ensembl Genomes. See the
+[UCSC downloads page](https://hgdownload.soe.ucsc.edu/downloads.html).
 
 Default installed layout:
 
@@ -308,6 +329,7 @@ metadata.
 writes into the selected output directory.
 
 ```bash
+# Install Roadmap ChromHMM resources for selected genomes and samples.
 sjcab-peak2anno-db install-chromhmm -m 18 -G hg19 -i E001,E063
 sjcab-peak2anno-db install-chromhmm -m 18 -G hg38 -i E063
 
@@ -358,6 +380,7 @@ into the selected output directory. With no selector, the command downloads
 `--overwrite` to replace them.
 
 ```bash
+# Install or download Segway annotation resources.
 sjcab-peak2anno-db install-segway
 sjcab-peak2anno-db install-segway -i GM12878,H1-HESC --include-label-info
 

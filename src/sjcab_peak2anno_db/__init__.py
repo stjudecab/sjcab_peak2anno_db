@@ -8,7 +8,9 @@ from ._derive import (
 )
 from ._dedup import (
     DEDUP_METHODS,
+    dedup_bed,
     dedup_gencode_bed,
+    filter_bed,
     filter_gencode_bed,
 )
 from ._chromhmm import (
@@ -156,7 +158,9 @@ __all__ = [
     "download_gencode_gtf",
     "download_gencode_tss_flank_region_unions",
     "download_segway",
+    "dedup_bed",
     "dedup_gencode_bed",
+    "filter_bed",
     "filter_gencode_bed",
     "gencode_bed_dir",
     "gencode_bed_filename",

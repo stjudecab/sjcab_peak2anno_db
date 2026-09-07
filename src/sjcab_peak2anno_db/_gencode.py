@@ -75,6 +75,7 @@ _ENSEMBL_CATALOGS = (
     ),
 )
 UCSC_GENES_URL = "https://hgdownload.soe.ucsc.edu/goldenPath/{}/bigZips/genes/"
+UCSC_DOWNLOADS_URL = "https://hgdownload.soe.ucsc.edu/downloads.html"
 
 
 @dataclass
@@ -134,7 +135,9 @@ def gencode_gtf_url(species: str, version: str) -> str:
     )
 
 
-def ensembl_gtf_url(species: str, version: str) -> str:
+def ensembl_gtf_url(
+    species: str, version: str, cache_dir: Optional[PathLike] = None
+) -> str:
     """Return an Ensembl GTF URL for a species and release."""
 
     species_key = species.lower().replace(" ", "_")
@@ -144,17 +147,22 @@ def ensembl_gtf_url(species: str, version: str) -> str:
         if metadata is not None:
             release = str(_latest_ensembl_release(metadata[2]))
         else:
-            metadata, release = _resolve_cached_ensembl_species(species)
+            metadata, release = _resolve_cached_ensembl_species(
+                species, cache_dir=cache_dir
+            )
     if not release.isdigit():
         raise ValueError(
             "Ensembl release must be an integer or def, got {!r}.".format(version)
         )
     release_number = int(release)
     if metadata is None:
-        metadata = _resolve_cached_ensembl_species(species, release_number)[0]
+        metadata = _resolve_cached_ensembl_species(
+            species, release_number, cache_dir=cache_dir
+        )[0]
     latin_name, division, genomes, references = metadata
-    if genomes:
-        _refresh_ensembl_default_link(release_number, genomes=True)
+    _refresh_ensembl_default_link(
+        release_number, genomes=genomes, cache_dir=cache_dir
+    )
     reference = next(
         (name for name, first, last in references if first <= release_number <= last),
         None,
@@ -175,9 +183,19 @@ def ensembl_gtf_url(species: str, version: str) -> str:
     )
 
 
-def ucsc_gtf_url(species: str, annotation: str = "ens") -> str:
+def ucsc_gtf_url(
+    species: str,
+    annotation: str = "ens",
+    cache_dir: Optional[PathLike] = None,
+) -> str:
     """Find an UCSC gene GTF for a short UCSC genome identifier."""
 
+    if species not in _ucsc_gtf_builds(cache_dir):
+        raise ValueError(
+            "UCSC build {!r} is not listed with a GTF on {}.".format(
+                species, UCSC_DOWNLOADS_URL
+            )
+        )
     listing_url = UCSC_GENES_URL.format(species)
     request = urllib.request.Request(
         listing_url, headers={"User-Agent": "sjcab_peak2anno_db"}
@@ -203,11 +221,49 @@ def ucsc_gtf_url(species: str, annotation: str = "ens") -> str:
     return listing_url + filename
 
 
-def _resolve_cached_ensembl_species(species: str, release: Optional[int] = None):
+def _ucsc_gtf_builds(cache_dir: Optional[PathLike] = None):
+    """Return cached UCSC build IDs whose downloads page advertises GTFs."""
+
+    cache_path = user_data_dir(cache_dir) / "ucsc" / "gtf_builds.tsv"
+    if cache_path.exists():
+        with cache_path.open("r", encoding="utf-8") as handle:
+            return {row.strip() for row in handle if row.strip()}
+
+    request = urllib.request.Request(
+        UCSC_DOWNLOADS_URL, headers={"User-Agent": "sjcab_peak2anno_db"}
+    )
+    with urllib.request.urlopen(request, timeout=120) as response:
+        page = response.read().decode("utf-8", "replace")
+
+    builds = set()
+    hrefs = re.findall(r'href=["\']([^"\']+)["\']', page, re.IGNORECASE)
+    for href in hrefs:
+        match = re.search(
+            r"(?:^|/)goldenPath/([A-Za-z0-9_.-]+)(?:/[^?#]*)(?:genes|\.gtf(?:\.gz)?)",
+            href,
+            re.IGNORECASE,
+        )
+        if match:
+            builds.add(match.group(1))
+
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = cache_path.with_name(cache_path.name + ".tmp")
+    with tmp_path.open("w", encoding="utf-8") as handle:
+        for build in sorted(builds):
+            handle.write(build + "\n")
+    tmp_path.replace(cache_path)
+    return builds
+
+
+def _resolve_cached_ensembl_species(
+    species: str,
+    release: Optional[int] = None,
+    cache_dir: Optional[PathLike] = None,
+):
     """Resolve an unlisted species from separate Vertebrates/Genomes catalogs."""
 
     wanted = species.lower().replace(" ", "_")
-    root = user_data_dir() / "ensembl"
+    root = user_data_dir(cache_dir) / "ensembl"
     for catalog_name, genomes, current_url, filename, cache_subdir in _ENSEMBL_CATALOGS:
         catalog_root = root / cache_subdir
         cache_path = catalog_root / filename
@@ -236,7 +292,9 @@ def _resolve_cached_ensembl_species(species: str, release: Optional[int] = None)
             release_path.parent.mkdir(parents=True, exist_ok=True)
             if not release_path.exists():
                 shutil.copyfile(cache_path, release_path)
-        _refresh_ensembl_species_cache_link(release_path, release, genomes)
+        _refresh_ensembl_species_cache_link(
+            release_path, release, genomes, cache_dir=cache_dir
+        )
         return match, str(release)
     raise ValueError(
         "Unknown Ensembl species {!r}; it was not found in the Ensembl catalogs.".format(
@@ -276,12 +334,15 @@ def _find_ensembl_species(cache_path: Path, wanted: str, genomes: bool):
 
 
 def _refresh_ensembl_species_cache_link(
-    cache_path: Path, release: int, genomes: bool
+    cache_path: Path,
+    release: int,
+    genomes: bool,
+    cache_dir: Optional[PathLike] = None,
 ) -> None:
     """Expose release metadata through the conventional ``def`` cache path."""
 
     catalog_root = cache_path.parent.parent
-    _refresh_ensembl_default_link(release, genomes=genomes)
+    _refresh_ensembl_default_link(release, genomes=genomes, cache_dir=cache_dir)
     root_path = catalog_root / cache_path.name
     if root_path.is_symlink():
         root_path.unlink()
@@ -293,12 +354,16 @@ def _refresh_ensembl_species_cache_link(
         shutil.copyfile(cache_path, root_path)
 
 
-def _refresh_ensembl_default_link(release: int, genomes: bool) -> None:
+def _refresh_ensembl_default_link(
+    release: int, genomes: bool, cache_dir: Optional[PathLike] = None
+) -> None:
     """Point the matching Ensembl catalog's ``def`` link at a release."""
 
-    ensembl_root = user_data_dir() / "ensembl"
-    ensembl_root.mkdir(parents=True, exist_ok=True)
-    default_dir = ensembl_root / "def"
+    catalog_root = user_data_dir(cache_dir) / "ensembl" / (
+        "genomes" if genomes else "vertebrates"
+    )
+    catalog_root.mkdir(parents=True, exist_ok=True)
+    default_dir = catalog_root / "def"
     if default_dir.is_symlink():
         default_dir.unlink()
     elif default_dir.exists():
@@ -307,7 +372,7 @@ def _refresh_ensembl_default_link(release: int, genomes: bool) -> None:
         except OSError:
             return
     try:
-        target = Path("genomes" if genomes else "vertebrates") / str(release)
+        target = Path(str(release))
         default_dir.symlink_to(target, target_is_directory=True)
     except OSError:
         default_dir.mkdir(parents=True, exist_ok=True)
@@ -383,15 +448,15 @@ def download_gencode_gtf(
         } else "ensembl"
         if source == "ensembl":
             try:
-                url = ucsc_gtf_url(species, ucsc_annotation)
+                url = ucsc_gtf_url(species, ucsc_annotation, cache_dir=cache_dir)
             except (OSError, ValueError):
-                url = ensembl_gtf_url(species, version)
+                url = ensembl_gtf_url(species, version, cache_dir=cache_dir)
         else:
             url = gencode_gtf_url(species, version)
     elif source.lower() == "ensembl":
-        url = ensembl_gtf_url(species, version)
+        url = ensembl_gtf_url(species, version, cache_dir=cache_dir)
     elif source.lower() == "ucsc":
-        url = ucsc_gtf_url(species, ucsc_annotation)
+        url = ucsc_gtf_url(species, ucsc_annotation, cache_dir=cache_dir)
     else:
         url = gencode_gtf_url(species, version)
     filename = url.rstrip("/").split("/")[-1]
