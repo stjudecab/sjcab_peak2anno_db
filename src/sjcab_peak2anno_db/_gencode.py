@@ -123,7 +123,7 @@ def ensembl_gtf_url(species: str, version: str) -> str:
     species_key = species.lower().replace(" ", "_")
     metadata = _ENSEMBL_SPECIES.get(species_key)
     release = str(version).lower().replace("release-", "", 1)
-    if release in {"def", "default", "latest"}:
+    if release in {"def", "default", "current", "latest"}:
         release = str(_latest_ensembl_release(metadata[2] if metadata else True))
     if not release.isdigit():
         raise ValueError(
@@ -133,6 +133,8 @@ def ensembl_gtf_url(species: str, version: str) -> str:
     if metadata is None:
         metadata = _ensembl_genomes_species(species, release_number)
     latin_name, division, genomes, references = metadata
+    if genomes:
+        _refresh_ensembl_default_link(release_number)
     reference = next(
         (name for name, first, last in references if first <= release_number <= last),
         None,
@@ -196,14 +198,7 @@ def _refresh_ensembl_species_cache_link(cache_path: Path, release: int) -> None:
     """Expose release metadata through the conventional ``def`` cache path."""
 
     ensembl_root = cache_path.parent.parent
-    default_dir = ensembl_root / "def"
-    if default_dir.is_symlink():
-        default_dir.unlink()
-    if not default_dir.exists():
-        try:
-            default_dir.symlink_to(str(release), target_is_directory=True)
-        except OSError:
-            default_dir.mkdir(parents=True, exist_ok=True)
+    _refresh_ensembl_default_link(release)
     root_path = ensembl_root / "species.txt"
     if root_path.is_symlink():
         root_path.unlink()
@@ -215,7 +210,37 @@ def _refresh_ensembl_species_cache_link(cache_path: Path, release: int) -> None:
         shutil.copyfile(cache_path, root_path)
 
 
+def _refresh_ensembl_default_link(release: int) -> None:
+    """Point the Ensembl Genomes ``def`` link at the requested release."""
+
+    ensembl_root = user_data_dir() / "ensembl"
+    ensembl_root.mkdir(parents=True, exist_ok=True)
+    default_dir = ensembl_root / "def"
+    if default_dir.is_symlink():
+        default_dir.unlink()
+    elif default_dir.exists():
+        try:
+            default_dir.rmdir()
+        except OSError:
+            return
+    try:
+        default_dir.symlink_to(str(release), target_is_directory=True)
+    except OSError:
+        default_dir.mkdir(parents=True, exist_ok=True)
+
+
 def _latest_ensembl_release(genomes: bool) -> int:
+    if genomes:
+        request = urllib.request.Request(
+            "https://ftp.ensemblgenomes.ebi.ac.uk/pub/VERSION",
+            headers={"User-Agent": "sjcab-peak2anno-db"},
+        )
+        with urllib.request.urlopen(request, timeout=120) as response:
+            value = response.read().decode("utf-8", "replace").strip()
+        match = re.search(r"\d+", value)
+        if match is None:
+            raise ValueError("Invalid Ensembl Genomes VERSION value: {!r}.".format(value))
+        return int(match.group(0))
     server = (
         "https://ftp.ensemblgenomes.ebi.ac.uk"
         if genomes
