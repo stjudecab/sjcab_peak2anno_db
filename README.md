@@ -66,6 +66,12 @@ by the bundled GENCODE registry. Its version is the Ensembl release number
 (`100`, for example), or `def` for the latest GTF listed by Ensembl. The same
 option is available on `download-feature`.
 
+For an Ensembl Genomes species not built into the resolver, the command fetches
+`species.txt` once, caches only `species`, `division`, and `assembly` under
+`$SJCAB_PEAK2ANNO_DB_PATH/ensembl/def/species.txt` (or
+`~/.sjcab_peak2anno_db/ensembl/def/species.txt`), and uses those fields to form
+the release URL.
+
 Default layout:
 
 ```text

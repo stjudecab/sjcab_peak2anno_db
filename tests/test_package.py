@@ -1977,6 +1977,21 @@ def test_ensembl_gtf_url_uses_release_and_reference():
     )
 
 
+def test_ensembl_gtf_url_uses_cached_genomes_species(monkeypatch, tmp_path):
+    monkeypatch.setenv("SJCAB_PEAK2ANNO_DB_PATH", str(tmp_path))
+    cache = tmp_path / "ensembl" / "def" / "species.txt"
+    cache.parent.mkdir(parents=True)
+    cache.write_text(
+        "species\tdivision\tassembly\n"
+        "bigelowiella_natans\tEnsemblProtists\tBigna1\n",
+        encoding="utf-8",
+    )
+    assert ensembl_gtf_url("bigelowiella_natans", "63") == (
+        "https://ftp.ensemblgenomes.ebi.ac.uk/pub/release-63/protists/gtf/"
+        "bigelowiella_natans/Bigelowiella_natans.Bigna1.63.gtf.gz"
+    )
+
+
 def test_filter_gencode_bed_isoid_omits_unmatched_genes(tmp_path):
     gene_bed = _write_isoform_selection_gene_bed(tmp_path)
     ids = tmp_path / "ids.txt"

@@ -14,6 +14,7 @@ from typing import Dict, Iterable, Mapping, Optional, Tuple, Union
 from ._derive import write_deduplong
 from ._download import ProgressCallback, download_file, report_progress
 from ._download_log import record_download_url
+from ._registry import user_data_dir
 
 PathLike = Union[str, os.PathLike]
 
@@ -122,11 +123,7 @@ def ensembl_gtf_url(species: str, version: str) -> str:
     species_key = species.lower().replace(" ", "_")
     metadata = _ENSEMBL_SPECIES.get(species_key)
     if metadata is None:
-        raise ValueError(
-            "Unknown Ensembl species {!r}; use a supported common or latin name.".format(
-                species
-            )
-        )
+        metadata = _ensembl_genomes_species(species)
     latin_name, division, genomes, references = metadata
     release = str(version).lower().replace("release-", "", 1)
     if release in {"def", "default", "latest"}:
@@ -154,6 +151,55 @@ def ensembl_gtf_url(species: str, version: str) -> str:
     return "https://ftp.ensembl.org/pub/release-{}/gtf/{}/{}".format(
         release, latin_name, filename
     )
+
+
+def _ensembl_genomes_species(species: str):
+    """Resolve an unlisted species from the cached Ensembl Genomes index."""
+
+    cache_path = user_data_dir() / "ensembl" / "def" / "species.txt"
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    if not cache_path.exists():
+        request = urllib.request.Request(
+            "https://ftp.ensemblgenomes.ebi.ac.uk/pub/current/species.txt",
+            headers={"User-Agent": "sjcab-peak2anno-db"},
+        )
+        with urllib.request.urlopen(request, timeout=120) as response:
+            rows = response.read().decode("utf-8", "replace").splitlines()
+        tmp_path = cache_path.with_name(cache_path.name + ".tmp")
+        with tmp_path.open("w", encoding="utf-8") as handle:
+            handle.write("species\tdivision\tassembly\n")
+            for row in rows:
+                if not row or row.startswith("#"):
+                    continue
+                fields = row.split("\t")
+                if len(fields) >= 5:
+                    handle.write("{}\t{}\t{}\n".format(fields[1], fields[2], fields[4]))
+        tmp_path.replace(cache_path)
+        _refresh_ensembl_species_cache_link(cache_path)
+
+    wanted = species.lower().replace(" ", "_")
+    with cache_path.open("r", encoding="utf-8") as handle:
+        next(handle, None)
+        for row in handle:
+            fields = row.rstrip("\n").split("\t")
+            if len(fields) == 3 and fields[0].lower() == wanted:
+                division = fields[1].replace("Ensembl", "").lower()
+                return fields[0], division, True, ((fields[2], 0, 10**9),)
+    raise ValueError(
+        "Unknown Ensembl species {!r}; it was not found in species.txt.".format(species)
+    )
+
+
+def _refresh_ensembl_species_cache_link(cache_path: Path) -> None:
+    """Expose the current metadata through the root cache path."""
+
+    root_path = cache_path.parent.parent / "species.txt"
+    if root_path.is_symlink() or root_path.exists():
+        return
+    try:
+        root_path.symlink_to(Path("def") / "species.txt")
+    except OSError:
+        shutil.copyfile(cache_path, root_path)
 
 
 def _latest_ensembl_release(genomes: bool) -> int:
