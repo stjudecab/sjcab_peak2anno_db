@@ -122,17 +122,17 @@ def ensembl_gtf_url(species: str, version: str) -> str:
 
     species_key = species.lower().replace(" ", "_")
     metadata = _ENSEMBL_SPECIES.get(species_key)
-    if metadata is None:
-        metadata = _ensembl_genomes_species(species)
-    latin_name, division, genomes, references = metadata
     release = str(version).lower().replace("release-", "", 1)
     if release in {"def", "default", "latest"}:
-        release = str(_latest_ensembl_release(genomes))
+        release = str(_latest_ensembl_release(metadata[2] if metadata else True))
     if not release.isdigit():
         raise ValueError(
             "Ensembl release must be an integer or def, got {!r}.".format(version)
         )
     release_number = int(release)
+    if metadata is None:
+        metadata = _ensembl_genomes_species(species, release_number)
+    latin_name, division, genomes, references = metadata
     reference = next(
         (name for name, first, last in references if first <= release_number <= last),
         None,
@@ -153,14 +153,16 @@ def ensembl_gtf_url(species: str, version: str) -> str:
     )
 
 
-def _ensembl_genomes_species(species: str):
+def _ensembl_genomes_species(species: str, release: int):
     """Resolve an unlisted species from the cached Ensembl Genomes index."""
 
-    cache_path = user_data_dir() / "ensembl" / "def" / "species.txt"
+    cache_path = user_data_dir() / "ensembl" / str(release) / "species.txt"
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     if not cache_path.exists():
         request = urllib.request.Request(
-            "https://ftp.ensemblgenomes.ebi.ac.uk/pub/current/species.txt",
+            "https://ftp.ensemblgenomes.ebi.ac.uk/pub/release-{}/species.txt".format(
+                release
+            ),
             headers={"User-Agent": "sjcab-peak2anno-db"},
         )
         with urllib.request.urlopen(request, timeout=120) as response:
@@ -175,7 +177,7 @@ def _ensembl_genomes_species(species: str):
                 if len(fields) >= 5:
                     handle.write("{}\t{}\t{}\n".format(fields[1], fields[2], fields[4]))
         tmp_path.replace(cache_path)
-        _refresh_ensembl_species_cache_link(cache_path)
+        _refresh_ensembl_species_cache_link(cache_path, release)
 
     wanted = species.lower().replace(" ", "_")
     with cache_path.open("r", encoding="utf-8") as handle:
@@ -190,11 +192,22 @@ def _ensembl_genomes_species(species: str):
     )
 
 
-def _refresh_ensembl_species_cache_link(cache_path: Path) -> None:
-    """Expose the current metadata through the root cache path."""
+def _refresh_ensembl_species_cache_link(cache_path: Path, release: int) -> None:
+    """Expose release metadata through the conventional ``def`` cache path."""
 
-    root_path = cache_path.parent.parent / "species.txt"
-    if root_path.is_symlink() or root_path.exists():
+    ensembl_root = cache_path.parent.parent
+    default_dir = ensembl_root / "def"
+    if default_dir.is_symlink():
+        default_dir.unlink()
+    if not default_dir.exists():
+        try:
+            default_dir.symlink_to(str(release), target_is_directory=True)
+        except OSError:
+            default_dir.mkdir(parents=True, exist_ok=True)
+    root_path = ensembl_root / "species.txt"
+    if root_path.is_symlink():
+        root_path.unlink()
+    if root_path.exists():
         return
     try:
         root_path.symlink_to(Path("def") / "species.txt")

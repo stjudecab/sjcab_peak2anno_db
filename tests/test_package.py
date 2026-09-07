@@ -1979,7 +1979,7 @@ def test_ensembl_gtf_url_uses_release_and_reference():
 
 def test_ensembl_gtf_url_uses_cached_genomes_species(monkeypatch, tmp_path):
     monkeypatch.setenv("SJCAB_PEAK2ANNO_DB_PATH", str(tmp_path))
-    cache = tmp_path / "ensembl" / "def" / "species.txt"
+    cache = tmp_path / "ensembl" / "63" / "species.txt"
     cache.parent.mkdir(parents=True)
     cache.write_text(
         "species\tdivision\tassembly\n"
