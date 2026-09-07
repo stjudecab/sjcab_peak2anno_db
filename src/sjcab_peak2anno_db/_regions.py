@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import re
+import shutil
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
@@ -389,14 +391,75 @@ def _resolve_gtf_for_regions(
 
 
 def _resolve_species_chrom_sizes(species: str) -> Optional[Path]:
+    cache_dir = user_data_dir() / "sizes"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    raw_path = cache_dir / "{}.sizes".format(species)
+    clean_path = cache_dir / "{}.sizes.clean".format(species)
+
+    if not raw_path.exists():
+        _cache_genomepy_sizes(species, raw_path)
     candidates = (
         Path("~/data/{}.sizes".format(species)).expanduser(),
         Path("~/data/{}/{}.sizes".format(species, species)).expanduser(),
     )
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-    return None
+    if not raw_path.exists():
+        for candidate in candidates:
+            if candidate.exists():
+                shutil.copyfile(candidate, raw_path)
+                break
+    if not raw_path.exists():
+        return None
+
+    if not clean_path.exists():
+        _write_clean_chrom_sizes(raw_path, clean_path)
+    return clean_path
+
+
+def _cache_genomepy_sizes(species: str, destination: Path) -> None:
+    """Materialize genomepy chromosome sizes in the package data directory."""
+
+    try:
+        from genomepy import Genome
+
+        genome = Genome(species)
+    except Exception:
+        return
+
+    sizes = getattr(genome, "sizes", None)
+    if sizes:
+        _write_sizes(destination, sizes.items())
+        return
+    source = getattr(genome, "sizes_file", None)
+    if source is not None and Path(source).exists():
+        shutil.copyfile(source, destination)
+
+
+def _write_sizes(destination: Path, rows: Iterable[Tuple[str, int]]) -> None:
+    temporary = destination.with_name(destination.name + ".tmp")
+    with temporary.open("w", encoding="utf-8") as handle:
+        for name, size in rows:
+            handle.write("{}\t{}\n".format(name, int(size)))
+    temporary.replace(destination)
+
+
+def _write_clean_chrom_sizes(source: Path, destination: Path) -> None:
+    temporary = destination.with_name(destination.name + ".tmp")
+    with source.open("r", encoding="utf-8") as source_handle, temporary.open(
+        "w", encoding="utf-8"
+    ) as destination_handle:
+        for line in source_handle:
+            fields = line.rstrip("\n").split()
+            if len(fields) >= 2 and _is_primary_chromosome(fields[0]):
+                destination_handle.write("{}\t{}\n".format(fields[0], fields[1]))
+    temporary.replace(destination)
+
+
+def _is_primary_chromosome(name: str) -> bool:
+    match = re.fullmatch(r"chr(\d+|X|Y|M)", name)
+    if match is None:
+        return False
+    suffix = match.group(1)
+    return suffix in {"X", "Y", "M"} or 1 <= int(suffix) <= 22
 
 
 def _read_chrom_sizes(

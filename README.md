@@ -73,6 +73,9 @@ automatic source selection is used by `download-feature`.
 Downloaded GTFs are stored in `{data_dir}/cachegtf/`, where `{data_dir}` is
 `--data-dir`, `SJCAB_PEAK2ANNO_DB_PATH`, or `~/.sjcab_peak2anno_db`. Use
 `--clean-cache` to remove the GTF after its BED files have been generated.
+Genomepy chromosome sizes are cached in `{data_dir}/sizes/{species}.sizes`;
+`{species}.sizes.clean` contains only `chr1`-`chr22`, `chrX`, `chrY`, and
+`chrM`.
 
 For Ensembl releases, `def`, `default`, `current`, and `latest` resolve the
 current release metadata. The separate links are
