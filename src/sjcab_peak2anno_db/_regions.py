@@ -467,12 +467,10 @@ def _download_ucsc_primary_chromosomes(species: str):
     request = urllib.request.Request(url, headers={"User-Agent": "sjcab_peak2anno_db"})
     with urllib.request.urlopen(request, timeout=120) as response:
         with gzip.GzipFile(fileobj=response) as compressed:
-            return {
-                alias
-                for line in compressed
-                for alias in line.decode("utf-8").split()[:-1]
-                if line.split() and line.split()[-1] == b"chromosome"
-            }
+            rows = [line.decode("utf-8").split() for line in compressed]
+    chromosome_rows = [row for row in rows if row and row[-1] == "chromosome"]
+    selected_rows = chromosome_rows or rows
+    return {alias for row in selected_rows for alias in row[:-1]}
 
 
 def _download_ensembl_sizes(species: str, destination: Path) -> None:
