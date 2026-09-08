@@ -73,9 +73,15 @@ automatic source selection is used by `download-feature`.
 Downloaded GTFs are stored in `{data_dir}/cachegtf/`, where `{data_dir}` is
 `--data-dir`, `SJCAB_PEAK2ANNO_DB_PATH`, or `~/.sjcab_peak2anno_db`. Use
 `--clean-cache` to remove the GTF after its BED files have been generated.
-Genomepy chromosome sizes are cached in `{data_dir}/sizes/{species}.sizes`;
-`{species}.sizes.clean` contains only `chr1`-`chr22`, `chrX`, `chrY`, and
-`chrM`.
+Known Ensembl chromosome sizes are bundled with the package. UCSC sizes are
+bundled for the latest two assemblies per species when available. Runtime
+copies are cached in `{data_dir}/sizes/{species}.sizes`; the corresponding
+`{species}.sizes.clean` is generated locally and contains only `chr1`-`chr22`,
+`chrX`, `chrY`, and `chrM` (or the equivalent unprefixed names).
+The packaged `data/gtf_builds.tsv` is copied to
+`{data_dir}/ucsc/gtf_builds.tsv`; when that runtime copy is older than six
+months, it is refreshed from the UCSC downloads page and newly listed builds
+get both runtime size files from their `bigZips/{build}.chrom.sizes` URL.
 
 For Ensembl releases, `def`, `default`, `current`, and `latest` resolve the
 current release metadata. The separate links are

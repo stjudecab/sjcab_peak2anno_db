@@ -2,22 +2,27 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
 from ._download import ProgressCallback, report_progress
 from ._derive import _parse_bed_fields, _site_interval
 from ._gencode import (
+    _ENSEMBL_SPECIES,
     _open_text,
     _parse_attributes,
+    _ucsc_gtf_builds,
     convert_gencode_gtf_to_bed,
     download_gencode_gtf,
     gencode_bed_filename,
 )
-from ._registry import user_data_dir
+from ._registry import data_root, user_data_dir
 
 PathLike = Union[str, os.PathLike]
 
@@ -397,7 +402,15 @@ def _resolve_species_chrom_sizes(species: str) -> Optional[Path]:
     clean_path = cache_dir / "{}.sizes.clean".format(species)
 
     if not raw_path.exists():
-        _cache_genomepy_sizes(species, raw_path)
+        _cache_packaged_sizes(species, raw_path)
+    if not raw_path.exists():
+        try:
+            if species in _ucsc_gtf_builds():
+                _download_ucsc_sizes(species, raw_path)
+            else:
+                _download_ensembl_sizes(species, raw_path)
+        except (OSError, ValueError, KeyError, json.JSONDecodeError):
+            pass
     candidates = (
         Path("~/data/{}.sizes".format(species)).expanduser(),
         Path("~/data/{}/{}.sizes".format(species, species)).expanduser(),
@@ -415,23 +428,56 @@ def _resolve_species_chrom_sizes(species: str) -> Optional[Path]:
     return clean_path
 
 
-def _cache_genomepy_sizes(species: str, destination: Path) -> None:
-    """Materialize genomepy chromosome sizes in the package data directory."""
+def _cache_packaged_sizes(species: str, destination: Path) -> None:
+    species_key = species.lower().replace(" ", "_")
+    names = [species]
+    metadata = _ENSEMBL_SPECIES.get(species_key)
+    if metadata is not None:
+        names.insert(0, metadata[0])
+    for name in names:
+        source = data_root() / "sizes" / "{}.sizes".format(name)
+        if source.exists():
+            shutil.copyfile(source, destination)
+            return
 
-    try:
-        from genomepy import Genome
 
-        genome = Genome(species)
-    except Exception:
-        return
+def _download_ucsc_sizes(species: str, destination: Path) -> None:
+    url = "https://hgdownload.soe.ucsc.edu/goldenPath/{0}/bigZips/{0}.chrom.sizes".format(
+        urllib.parse.quote(species, safe="")
+    )
+    _write_sizes_from_text(url, destination)
 
-    sizes = getattr(genome, "sizes", None)
-    if sizes:
-        _write_sizes(destination, sizes.items())
-        return
-    source = getattr(genome, "sizes_file", None)
-    if source is not None and Path(source).exists():
-        shutil.copyfile(source, destination)
+
+def _download_ensembl_sizes(species: str, destination: Path) -> None:
+    url = "https://rest.ensembl.org/info/assembly/{}?content-type=application/json".format(
+        urllib.parse.quote(species, safe="")
+    )
+    payload = _fetch_json(url)
+    rows = payload.get("top_level_region", [])
+    _write_sizes(
+        destination,
+        ((row["name"], row["length"]) for row in rows if "name" in row),
+    )
+
+
+def _fetch_json(url: str):
+    request = urllib.request.Request(
+        url, headers={"User-Agent": "sjcab_peak2anno_db"}
+    )
+    with urllib.request.urlopen(request, timeout=120) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _write_sizes_from_text(url: str, destination: Path) -> None:
+    request = urllib.request.Request(
+        url, headers={"User-Agent": "sjcab_peak2anno_db"}
+    )
+    with urllib.request.urlopen(request, timeout=120) as response:
+        rows = response.read().decode("utf-8").splitlines()
+    _write_sizes(
+        destination,
+        (line.split()[:2] for line in rows if len(line.split()) >= 2),
+    )
 
 
 def _write_sizes(destination: Path, rows: Iterable[Tuple[str, int]]) -> None:
@@ -455,11 +501,11 @@ def _write_clean_chrom_sizes(source: Path, destination: Path) -> None:
 
 
 def _is_primary_chromosome(name: str) -> bool:
-    match = re.fullmatch(r"chr(\d+|X|Y|M)", name)
+    match = re.fullmatch(r"(?:chr)?(\d+|X|Y|M|MT)", name)
     if match is None:
         return False
     suffix = match.group(1)
-    return suffix in {"X", "Y", "M"} or 1 <= int(suffix) <= 22
+    return suffix in {"X", "Y", "M", "MT"} or 1 <= int(suffix) <= 22
 
 
 def _read_chrom_sizes(

@@ -40,3 +40,6 @@ conda-bld/
 !/src/sjcab_peak2anno_db/data/gencode.vM17.mm9.gene.bed.withtype
 !/src/sjcab_peak2anno_db/data/gencode.vM39.mm39.gene.bed.withtype
 !/src/sjcab_peak2anno_db/data/sacCer3.geneNames.bed
+!/src/sjcab_peak2anno_db/data/gtf_builds.tsv
+!/src/sjcab_peak2anno_db/data/sizes/
+!/src/sjcab_peak2anno_db/data/sizes/**

@@ -6,6 +6,7 @@ import gzip
 import os
 import re
 import shutil
+import time
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,7 +15,7 @@ from typing import Dict, Iterable, Mapping, Optional, Tuple, Union
 from ._derive import write_deduplong
 from ._download import ProgressCallback, download_file, report_progress
 from ._download_log import record_download_url
-from ._registry import user_data_dir
+from ._registry import data_root, user_data_dir
 
 PathLike = Union[str, os.PathLike]
 
@@ -222,18 +223,32 @@ def ucsc_gtf_url(
 
 
 def _ucsc_gtf_builds(cache_dir: Optional[PathLike] = None):
-    """Return cached UCSC build IDs whose downloads page advertises GTFs."""
+    """Return UCSC build IDs, refreshing the runtime cache after six months."""
 
     cache_path = user_data_dir(cache_dir) / "ucsc" / "gtf_builds.tsv"
-    if cache_path.exists():
-        with cache_path.open("r", encoding="utf-8") as handle:
-            return {row.strip() for row in handle if row.strip()}
+    old_builds = _read_ucsc_builds(cache_path) if cache_path.exists() else set()
+    if cache_path.exists() and time.time() - cache_path.stat().st_mtime < 180 * 86400:
+        return old_builds
+    package_path = data_root() / "gtf_builds.tsv"
+    if not cache_path.exists() and package_path.exists():
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(package_path, cache_path)
+        return _read_ucsc_builds(cache_path)
 
-    request = urllib.request.Request(
-        UCSC_DOWNLOADS_URL, headers={"User-Agent": "sjcab_peak2anno_db"}
-    )
-    with urllib.request.urlopen(request, timeout=120) as response:
-        page = response.read().decode("utf-8", "replace")
+    try:
+        request = urllib.request.Request(
+            UCSC_DOWNLOADS_URL, headers={"User-Agent": "sjcab_peak2anno_db"}
+        )
+        with urllib.request.urlopen(request, timeout=120) as response:
+            page = response.read().decode("utf-8", "replace")
+    except OSError:
+        if cache_path.exists():
+            return _read_ucsc_builds(cache_path)
+        if package_path.exists():
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(package_path, cache_path)
+            return _read_ucsc_builds(cache_path)
+        raise
 
     builds = set()
     hrefs = re.findall(r'href=["\']([^"\']+)["\']', page, re.IGNORECASE)
@@ -243,6 +258,12 @@ def _ucsc_gtf_builds(cache_dir: Optional[PathLike] = None):
             href,
             re.IGNORECASE,
         )
+        if match is None:
+            match = re.search(
+                r"(?:^|/)goldenPath/([A-Za-z0-9_.-]+)/bigZips/",
+                href,
+                re.IGNORECASE,
+            )
         if match:
             builds.add(match.group(1))
 
@@ -252,7 +273,54 @@ def _ucsc_gtf_builds(cache_dir: Optional[PathLike] = None):
         for build in sorted(builds):
             handle.write(build + "\n")
     tmp_path.replace(cache_path)
+    _cache_new_ucsc_sizes(builds - old_builds, cache_dir)
     return builds
+
+
+def _read_ucsc_builds(path: Path):
+    with path.open("r", encoding="utf-8") as handle:
+        return {
+            row.split("\t", 1)[0].strip()
+            for row in handle
+            if row.strip() and not row.startswith("#")
+        }
+
+
+def _cache_new_ucsc_sizes(builds, cache_dir: Optional[PathLike]) -> None:
+    sizes_dir = user_data_dir(cache_dir) / "sizes"
+    sizes_dir.mkdir(parents=True, exist_ok=True)
+    for build in sorted(builds):
+        raw_path = sizes_dir / "{}.sizes".format(build)
+        clean_path = sizes_dir / "{}.sizes.clean".format(build)
+        if raw_path.exists() and clean_path.exists():
+            continue
+        url = "https://hgdownload.soe.ucsc.edu/goldenPath/{0}/bigZips/{0}.chrom.sizes".format(
+            build
+        )
+        try:
+            request = urllib.request.Request(
+                url, headers={"User-Agent": "sjcab_peak2anno_db"}
+            )
+            with urllib.request.urlopen(request, timeout=120) as response:
+                rows = response.read().decode("utf-8").splitlines()
+        except OSError:
+            continue
+        temporary = raw_path.with_name(raw_path.name + ".tmp")
+        with temporary.open("w", encoding="utf-8") as handle:
+            for row in rows:
+                fields = row.split()
+                if len(fields) >= 2:
+                    handle.write("{}\t{}\n".format(fields[0], fields[1]))
+        temporary.replace(raw_path)
+        temporary = clean_path.with_name(clean_path.name + ".tmp")
+        with temporary.open("w", encoding="utf-8") as handle:
+            for row in rows:
+                fields = row.split()
+                if len(fields) >= 2 and re.fullmatch(
+                    r"(?:chr)?(?:[1-9]|1[0-9]|2[0-2]|X|Y|M|MT)", fields[0]
+                ):
+                    handle.write("{}\t{}\n".format(fields[0], fields[1]))
+        temporary.replace(clean_path)
 
 
 def _resolve_cached_ensembl_species(

@@ -7,10 +7,7 @@ name = "sjcab_peak2anno_db"
 version = "0.1.6"
 description = "Gene-backed peak-to-annotation BED resources for SJ/CAB workflows."
 readme = "README.md"
-requires-python = ">=3.9"
-dependencies = [
-  "genomepy==0.16.4",
-]
+requires-python = ">=3.7"
 authors = [
   { name = "SJ/CAB" }
 ]
@@ -48,6 +45,8 @@ sjcab_peak2anno_db = [
   "data/gencode.vM39.mm39.gene.bed.withtype",
   "data/sacCer3.geneNames.bed",
   "data/segway_downloads.tsv",
+  "data/gtf_builds.tsv",
+  "data/sizes/*.sizes",
   "data/blacklists/*",
   "data/cgi/*_cgi.bed",
 ]

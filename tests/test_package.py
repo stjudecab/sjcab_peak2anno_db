@@ -1,6 +1,4 @@
 import os
-import sys
-import types
 
 import sjcab_peak2anno_db as db
 import sjcab_peak2anno_db._chromhmm as chromhmm
@@ -1968,35 +1966,21 @@ def test_parse_bp_accepts_m_and_mb():
     assert regions._parse_bp("2mb") == 2000000
 
 
-def test_resolve_species_chrom_sizes_caches_genomepy_and_primary_chromosomes(
+def test_resolve_species_chrom_sizes_generates_primary_chromosomes(
     monkeypatch, tmp_path
 ):
-    class FakeGenome:
-        sizes = {
-            "chr1": 100,
-            "chr22": 2200,
-            "chrX": 23,
-            "chrY": 24,
-            "chrM": 25,
-            "chrUn": 26,
-            "chr23": 27,
-        }
-
-        def __init__(self, species):
-            self.species = species
-
-    fake_genomepy = types.ModuleType("genomepy")
-    fake_genomepy.Genome = FakeGenome
-    monkeypatch.setitem(sys.modules, "genomepy", fake_genomepy)
     monkeypatch.setenv("SJCAB_PEAK2ANNO_DB_PATH", str(tmp_path))
-
-    clean_path = regions._resolve_species_chrom_sizes("hg19")
-
-    assert clean_path == tmp_path / "sizes/hg19.sizes.clean"
-    assert (tmp_path / "sizes/hg19.sizes").read_text(encoding="utf-8") == (
+    raw_path = tmp_path / "sizes/other_species.sizes"
+    raw_path.parent.mkdir(parents=True)
+    raw_path.write_text(
         "chr1\t100\nchr22\t2200\nchrX\t23\nchrY\t24\nchrM\t25\n"
-        "chrUn\t26\nchr23\t27\n"
+        "chrUn\t26\nchr23\t27\n",
+        encoding="utf-8",
     )
+
+    clean_path = regions._resolve_species_chrom_sizes("other_species")
+
+    assert clean_path == tmp_path / "sizes/other_species.sizes.clean"
     assert clean_path.read_text(encoding="utf-8") == (
         "chr1\t100\nchr22\t2200\nchrX\t23\nchrY\t24\nchrM\t25\n"
     )
