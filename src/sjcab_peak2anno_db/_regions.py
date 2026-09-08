@@ -462,10 +462,7 @@ def _download_ucsc_sizes(species: str, destination: Path) -> None:
 
 
 def _download_ensembl_sizes(species: str, destination: Path) -> None:
-    url = "https://rest.ensembl.org/info/assembly/{}?content-type=application/json".format(
-        urllib.parse.quote(species, safe="")
-    )
-    payload = _fetch_json(url)
+    payload = _fetch_ensembl_assembly(species)
     rows = payload.get("top_level_region", [])
     _write_sizes(
         destination,
@@ -474,10 +471,7 @@ def _download_ensembl_sizes(species: str, destination: Path) -> None:
 
 
 def _download_ensembl_primary_chromosomes(species: str):
-    url = "https://rest.ensembl.org/info/assembly/{}?content-type=application/json".format(
-        urllib.parse.quote(species, safe="")
-    )
-    payload = _fetch_json(url)
+    payload = _fetch_ensembl_assembly(species)
     karyotype = set(payload.get("karyotype", []))
     return {
         row["name"]
@@ -489,6 +483,47 @@ def _download_ensembl_primary_chromosomes(species: str):
             and row["name"] in karyotype
         )
     }
+
+
+def _fetch_ensembl_assembly(species: str):
+    url = "https://rest.ensembl.org/info/assembly/{}?content-type=application/json".format(
+        urllib.parse.quote(species, safe="")
+    )
+    try:
+        payload = _fetch_json(url)
+        if payload.get("top_level_region"):
+            return payload
+    except (OSError, ValueError):
+        payload = None
+
+    taxonomy_url = "https://rest.ensembl.org/taxonomy/id/{}?content-type=application/json".format(
+        urllib.parse.quote(species, safe="")
+    )
+    taxonomy = _fetch_json(taxonomy_url)
+    taxon_id = taxonomy.get("id") or taxonomy.get("taxon_id")
+    if taxon_id is None:
+        raise ValueError("Ensembl taxonomy response has no ID for {!r}".format(species))
+    genomes_url = "https://rest.ensembl.org/info/genomes/taxonomy/{}?content-type=application/json".format(
+        urllib.parse.quote(str(taxon_id), safe="")
+    )
+    genomes = _fetch_json(genomes_url)
+    entries = genomes if isinstance(genomes, list) else genomes.get("genomes", [])
+    wanted = species.lower().replace(" ", "_")
+    genome_name = next(
+        (
+            entry.get("name")
+            for entry in entries
+            if isinstance(entry, dict)
+            and entry.get("name", "").lower().startswith(wanted + "_")
+        ),
+        None,
+    )
+    if genome_name is None:
+        raise ValueError("Ensembl taxonomy has no assembly genome for {!r}".format(species))
+    assembly_url = "https://rest.ensembl.org/info/assembly/{}?content-type=application/json".format(
+        urllib.parse.quote(genome_name, safe="")
+    )
+    return _fetch_json(assembly_url)
 
 
 def _fetch_json(url: str):
