@@ -359,6 +359,18 @@ def _download_ucsc_primary_chromosomes(species: str):
             document = candidate
             break
     ftp_path = document.get("ftppath_refseq") or document.get("ftppath_genbank")
+    if not ftp_path and document.get("assemblyaccession"):
+        accession = document["assemblyaccession"]
+        accession_number = accession.split("_", 1)[1].split(".", 1)[0]
+        assembly_name = document.get("assemblyname", accession)
+        ftp_path = "https://ftp.ncbi.nlm.nih.gov/genomes/all/{}/{}/{}/{}/{}_{}".format(
+            accession[:3],
+            accession_number[:3],
+            accession_number[3:6],
+            accession_number[6:9],
+            accession,
+            assembly_name,
+        )
     if not ftp_path:
         raise ValueError("NCBI Assembly summary has no FTP path for {!r}".format(species))
     ftp_path = ftp_path.replace("ftp://", "https://")
