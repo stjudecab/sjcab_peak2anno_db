@@ -331,15 +331,47 @@ def _cache_new_ucsc_sizes(builds, cache_dir: Optional[PathLike]) -> None:
 def _download_ucsc_primary_chromosomes(species: str):
     """Return assembled molecules from the NCBI report for a UCSC build."""
 
+    report_cache = user_data_dir() / "tmp" / "assembly_reports" / (
+        species + ".assembly_report.txt"
+    )
+    if report_cache.exists():
+        return _parse_assembly_report(
+            report_cache.read_text(encoding="utf-8"), species
+        )
+
+    find_url = "https://api.genome.ucsc.edu/findGenome?q={}".format(
+        urllib.parse.quote(species)
+    )
+    find_payload = json.loads(
+        urllib.request.urlopen(find_url, timeout=120).read().decode("utf-8")
+    )
+    genome = find_payload.get(species)
+    if genome is None:
+        genome = next(
+            (value for key, value in find_payload.items() if key.lower() == species.lower()),
+            None,
+        )
+    if not genome or not genome.get("scientificName"):
+        raise ValueError("UCSC findGenome found no scientific name for {!r}".format(species))
+    record_download_url(find_url, destination=report_cache)
+    scientific_name = genome["scientificName"]
+    accessions = re.findall(r"(?:GC[AF]_\d+\.\d+)", genome.get("description", ""))
+
     ids = []
-    for term in ("{}[Assembly Name]".format(species), species):
+    search_terms = [
+        '{} AND "{}"[Organism]'.format(species, scientific_name),
+        "{}[Assembly Name]".format(species),
+    ]
+    search_terms.extend("{}[Assembly Accession]".format(accession) for accession in accessions)
+    for search_term in search_terms:
         search_url = "{}?db=assembly&term={}".format(
             NCBI_EUTILS_URL.format("esearch.fcgi"),
-            urllib.parse.quote(term),
+            urllib.parse.quote(search_term),
         )
         search_payload = urllib.request.urlopen(search_url, timeout=120).read().decode(
             "utf-8", "replace"
         )
+        record_download_url(search_url, destination=report_cache)
         ids = re.findall(r"<Id>(\d+)</Id>", search_payload)
         if ids:
             break
@@ -351,6 +383,7 @@ def _download_ucsc_primary_chromosomes(species: str):
     summary = json.loads(
         urllib.request.urlopen(summary_url, timeout=120).read().decode("utf-8")
     )
+    record_download_url(summary_url, destination=report_cache)
     documents = summary.get("result", {})
     document = documents.get(ids[0], {})
     for candidate_id in summary.get("result", {}).get("uids", []):
@@ -358,7 +391,11 @@ def _download_ucsc_primary_chromosomes(species: str):
         if candidate.get("ucscname", "").lower() == species.lower():
             document = candidate
             break
-    ftp_path = document.get("ftppath_refseq") or document.get("ftppath_genbank")
+    ftp_path = document.get("ftppath_assembly_rpt")
+    if ftp_path:
+        report_url = ftp_path.replace("ftp://", "https://")
+    else:
+        ftp_path = document.get("ftppath_refseq") or document.get("ftppath_genbank")
     if not ftp_path and document.get("assemblyaccession"):
         accession = document["assemblyaccession"]
         accession_number = accession.split("_", 1)[1].split(".", 1)[0]
@@ -373,12 +410,20 @@ def _download_ucsc_primary_chromosomes(species: str):
         )
     if not ftp_path:
         raise ValueError("NCBI Assembly summary has no FTP path for {!r}".format(species))
-    ftp_path = ftp_path.replace("ftp://", "https://")
-    report_url = ftp_path.rstrip("/") + "/" + ftp_path.rstrip("/").rsplit("/", 1)[-1]
-    report_url += "_assembly_report.txt"
+    if not document.get("ftppath_assembly_rpt"):
+        ftp_path = ftp_path.replace("ftp://", "https://")
+        report_url = ftp_path.rstrip("/") + "/" + ftp_path.rstrip("/").rsplit("/", 1)[-1]
+        report_url += "_assembly_report.txt"
     report = urllib.request.urlopen(report_url, timeout=120).read().decode(
         "utf-8", "replace"
     )
+    report_cache.parent.mkdir(parents=True, exist_ok=True)
+    report_cache.write_text(report, encoding="utf-8")
+    record_download_url(report_url, destination=report_cache)
+    return _parse_assembly_report(report, species)
+
+
+def _parse_assembly_report(report: str, species: str):
     primary = set()
     for line in report.splitlines():
         if not line or line.startswith("#"):
