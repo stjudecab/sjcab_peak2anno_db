@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import gzip
 import os
 import re
 import shutil
@@ -18,6 +17,7 @@ from ._gencode import (
     _ENSEMBL_SPECIES,
     _open_text,
     _parse_attributes,
+    _download_ucsc_primary_chromosomes,
     _ucsc_gtf_builds,
     convert_gencode_gtf_to_bed,
     download_gencode_gtf,
@@ -457,20 +457,6 @@ def _download_ucsc_sizes(species: str, destination: Path) -> None:
         urllib.parse.quote(species, safe="")
     )
     _write_sizes_from_text(url, destination)
-
-
-def _download_ucsc_primary_chromosomes(species: str):
-    url = (
-        "https://hgdownload.soe.ucsc.edu/goldenPath/{}/database/"
-        "chromAlias.txt.gz"
-    ).format(urllib.parse.quote(species, safe=""))
-    request = urllib.request.Request(url, headers={"User-Agent": "sjcab_peak2anno_db"})
-    with urllib.request.urlopen(request, timeout=120) as response:
-        with gzip.GzipFile(fileobj=response) as compressed:
-            rows = [line.decode("utf-8").split() for line in compressed]
-    chromosome_rows = [row for row in rows if row and row[-1] == "chromosome"]
-    selected_rows = chromosome_rows or rows
-    return {alias for row in selected_rows for alias in row[:-1]}
 
 
 def _download_ensembl_sizes(species: str, destination: Path) -> None:

@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import gzip
+import json
 import os
 import re
 import shutil
 import time
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -77,6 +79,7 @@ _ENSEMBL_CATALOGS = (
 )
 UCSC_GENES_URL = "https://hgdownload.soe.ucsc.edu/goldenPath/{}/bigZips/genes/"
 UCSC_DOWNLOADS_URL = "https://hgdownload.soe.ucsc.edu/downloads.html"
+NCBI_EUTILS_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/{}"
 
 
 @dataclass
@@ -312,15 +315,68 @@ def _cache_new_ucsc_sizes(builds, cache_dir: Optional[PathLike]) -> None:
                 if len(fields) >= 2:
                     handle.write("{}\t{}\n".format(fields[0], fields[1]))
         temporary.replace(raw_path)
+        try:
+            primary_chromosomes = _download_ucsc_primary_chromosomes(build)
+        except (OSError, ValueError, KeyError, json.JSONDecodeError):
+            continue
         temporary = clean_path.with_name(clean_path.name + ".tmp")
         with temporary.open("w", encoding="utf-8") as handle:
             for row in rows:
                 fields = row.split()
-                if len(fields) >= 2 and re.fullmatch(
-                    r"(?:chr)?(?:[1-9]|1[0-9]|2[0-2]|X|Y|M|MT)", fields[0]
-                ):
+                if len(fields) >= 2 and fields[0] in primary_chromosomes:
                     handle.write("{}\t{}\n".format(fields[0], fields[1]))
         temporary.replace(clean_path)
+
+
+def _download_ucsc_primary_chromosomes(species: str):
+    """Return assembled molecules from the NCBI report for a UCSC build."""
+
+    ids = []
+    for term in ("{}[Assembly Name]".format(species), species):
+        search_url = "{}?db=assembly&term={}".format(
+            NCBI_EUTILS_URL.format("esearch.fcgi"),
+            urllib.parse.quote(term),
+        )
+        search_payload = urllib.request.urlopen(search_url, timeout=120).read().decode(
+            "utf-8", "replace"
+        )
+        ids = re.findall(r"<Id>(\d+)</Id>", search_payload)
+        if ids:
+            break
+    if not ids:
+        raise ValueError("NCBI Assembly search found no record for {!r}".format(species))
+    summary_url = "{}?db=assembly&id={}&retmode=json".format(
+        NCBI_EUTILS_URL.format("esummary.fcgi"), ids[0]
+    )
+    summary = json.loads(
+        urllib.request.urlopen(summary_url, timeout=120).read().decode("utf-8")
+    )
+    document = summary.get("result", {}).get(ids[0], {})
+    ftp_path = document.get("ftppath_refseq") or document.get("ftppath_genbank")
+    if not ftp_path:
+        raise ValueError("NCBI Assembly summary has no FTP path for {!r}".format(species))
+    ftp_path = ftp_path.replace("ftp://", "https://")
+    report_url = ftp_path.rstrip("/") + "/" + ftp_path.rstrip("/").rsplit("/", 1)[-1]
+    report_url += "_assembly_report.txt"
+    report = urllib.request.urlopen(report_url, timeout=120).read().decode(
+        "utf-8", "replace"
+    )
+    primary = set()
+    for line in report.splitlines():
+        if not line or line.startswith("#"):
+            continue
+        fields = line.split("\t")
+        if len(fields) > 1 and fields[1] == "assembled-molecule":
+            primary.update(
+                field
+                for index in (0, 2, 9)
+                if len(fields) > index
+                for field in (fields[index],)
+                if field and field != "na"
+            )
+    if not primary:
+        raise ValueError("NCBI Assembly report has no assembled molecules for {!r}".format(species))
+    return primary
 
 
 def _resolve_cached_ensembl_species(
