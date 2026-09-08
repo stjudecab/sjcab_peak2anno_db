@@ -346,12 +346,18 @@ def _download_ucsc_primary_chromosomes(species: str):
     if not ids:
         raise ValueError("NCBI Assembly search found no record for {!r}".format(species))
     summary_url = "{}?db=assembly&id={}&retmode=json".format(
-        NCBI_EUTILS_URL.format("esummary.fcgi"), ids[0]
+        NCBI_EUTILS_URL.format("esummary.fcgi"), ",".join(ids[:20])
     )
     summary = json.loads(
         urllib.request.urlopen(summary_url, timeout=120).read().decode("utf-8")
     )
-    document = summary.get("result", {}).get(ids[0], {})
+    documents = summary.get("result", {})
+    document = documents.get(ids[0], {})
+    for candidate_id in summary.get("result", {}).get("uids", []):
+        candidate = documents.get(candidate_id, {})
+        if candidate.get("ucscname", "").lower() == species.lower():
+            document = candidate
+            break
     ftp_path = document.get("ftppath_refseq") or document.get("ftppath_genbank")
     if not ftp_path:
         raise ValueError("NCBI Assembly summary has no FTP path for {!r}".format(species))
