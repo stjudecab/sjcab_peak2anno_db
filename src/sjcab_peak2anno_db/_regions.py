@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import re
 import shutil
+import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -476,10 +478,16 @@ def _download_ensembl_primary_chromosomes(species: str):
         urllib.parse.quote(species, safe="")
     )
     payload = _fetch_json(url)
+    karyotype = set(payload.get("karyotype", []))
     return {
         row["name"]
         for row in payload.get("top_level_region", [])
-        if row.get("coord_system") == "chromosome" and "name" in row
+        if "name" in row
+        and (
+            row.get("coord_system") == "chromosome"
+            or row.get("coord_system") == "primary_assembly"
+            and row["name"] in karyotype
+        )
     }
 
 
@@ -487,8 +495,14 @@ def _fetch_json(url: str):
     request = urllib.request.Request(
         url, headers={"User-Agent": "sjcab_peak2anno_db"}
     )
-    with urllib.request.urlopen(request, timeout=120) as response:
-        return json.loads(response.read().decode("utf-8"))
+    for attempt in range(5):
+        try:
+            with urllib.request.urlopen(request, timeout=120) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except (OSError, ValueError):
+            if attempt == 4:
+                raise
+            time.sleep(random.uniform(1.0, 5.0))
 
 
 def _write_sizes_from_text(url: str, destination: Path) -> None:
