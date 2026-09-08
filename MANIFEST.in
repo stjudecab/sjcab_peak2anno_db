@@ -18,6 +18,8 @@ include src/sjcab_peak2anno_db/data/gencode.vM17.mm9.gene.bed.withtype
 include src/sjcab_peak2anno_db/data/gencode.vM39.mm39.gene.bed.withtype
 include src/sjcab_peak2anno_db/data/sacCer3.geneNames.bed
 include src/sjcab_peak2anno_db/data/segway_downloads.tsv
+include src/sjcab_peak2anno_db/data/gtf_builds.tsv
+recursive-include src/sjcab_peak2anno_db/data/sizes *.sizes *.sizes.clean
 recursive-include src/sjcab_peak2anno_db/data/blacklists *
 include src/sjcab_peak2anno_db/data/cgi/*_cgi.bed
 

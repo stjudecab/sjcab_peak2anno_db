@@ -47,6 +47,7 @@ sjcab_peak2anno_db = [
   "data/segway_downloads.tsv",
   "data/gtf_builds.tsv",
   "data/sizes/*.sizes",
+  "data/sizes/*.sizes.clean",
   "data/blacklists/*",
   "data/cgi/*_cgi.bed",
 ]

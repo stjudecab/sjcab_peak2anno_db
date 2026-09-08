@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import gzip
 import os
 import re
 import shutil
@@ -401,8 +402,7 @@ def _resolve_species_chrom_sizes(species: str) -> Optional[Path]:
     raw_path = cache_dir / "{}.sizes".format(species)
     clean_path = cache_dir / "{}.sizes.clean".format(species)
 
-    if not raw_path.exists():
-        _cache_packaged_sizes(species, raw_path)
+    packaged_clean = _cache_packaged_sizes(species, raw_path)
     if not raw_path.exists():
         try:
             if species in _ucsc_gtf_builds():
@@ -424,11 +424,20 @@ def _resolve_species_chrom_sizes(species: str) -> Optional[Path]:
         return None
 
     if not clean_path.exists():
-        _write_clean_chrom_sizes(raw_path, clean_path)
+        if packaged_clean is not None and packaged_clean.exists():
+            shutil.copyfile(packaged_clean, clean_path)
+        elif species in _ucsc_gtf_builds():
+            _write_clean_chrom_sizes(
+                raw_path, clean_path, _download_ucsc_primary_chromosomes(species)
+            )
+        else:
+            _write_clean_chrom_sizes(
+                raw_path, clean_path, _download_ensembl_primary_chromosomes(species)
+            )
     return clean_path
 
 
-def _cache_packaged_sizes(species: str, destination: Path) -> None:
+def _cache_packaged_sizes(species: str, destination: Path) -> Optional[Path]:
     species_key = species.lower().replace(" ", "_")
     names = [species]
     metadata = _ENSEMBL_SPECIES.get(species_key)
@@ -438,7 +447,9 @@ def _cache_packaged_sizes(species: str, destination: Path) -> None:
         source = data_root() / "sizes" / "{}.sizes".format(name)
         if source.exists():
             shutil.copyfile(source, destination)
-            return
+            clean_source = source.with_name(source.name + ".clean")
+            return clean_source if clean_source.exists() else None
+    return None
 
 
 def _download_ucsc_sizes(species: str, destination: Path) -> None:
@@ -446,6 +457,22 @@ def _download_ucsc_sizes(species: str, destination: Path) -> None:
         urllib.parse.quote(species, safe="")
     )
     _write_sizes_from_text(url, destination)
+
+
+def _download_ucsc_primary_chromosomes(species: str):
+    url = (
+        "https://hgdownload.soe.ucsc.edu/goldenPath/{}/database/"
+        "chromAlias.txt.gz"
+    ).format(urllib.parse.quote(species, safe=""))
+    request = urllib.request.Request(url, headers={"User-Agent": "sjcab_peak2anno_db"})
+    with urllib.request.urlopen(request, timeout=120) as response:
+        with gzip.GzipFile(fileobj=response) as compressed:
+            return {
+                alias
+                for line in compressed
+                for alias in line.decode("utf-8").split()[:-1]
+                if line.split() and line.split()[-1] == b"chromosome"
+            }
 
 
 def _download_ensembl_sizes(species: str, destination: Path) -> None:
@@ -458,6 +485,18 @@ def _download_ensembl_sizes(species: str, destination: Path) -> None:
         destination,
         ((row["name"], row["length"]) for row in rows if "name" in row),
     )
+
+
+def _download_ensembl_primary_chromosomes(species: str):
+    url = "https://rest.ensembl.org/info/assembly/{}?content-type=application/json".format(
+        urllib.parse.quote(species, safe="")
+    )
+    payload = _fetch_json(url)
+    return {
+        row["name"]
+        for row in payload.get("top_level_region", [])
+        if row.get("coord_system") == "chromosome" and "name" in row
+    }
 
 
 def _fetch_json(url: str):
@@ -488,14 +527,19 @@ def _write_sizes(destination: Path, rows: Iterable[Tuple[str, int]]) -> None:
     temporary.replace(destination)
 
 
-def _write_clean_chrom_sizes(source: Path, destination: Path) -> None:
+def _write_clean_chrom_sizes(
+    source: Path, destination: Path, primary_chromosomes=None
+) -> None:
     temporary = destination.with_name(destination.name + ".tmp")
     with source.open("r", encoding="utf-8") as source_handle, temporary.open(
         "w", encoding="utf-8"
     ) as destination_handle:
         for line in source_handle:
             fields = line.rstrip("\n").split()
-            if len(fields) >= 2 and _is_primary_chromosome(fields[0]):
+            if len(fields) >= 2 and (
+                (not primary_chromosomes and _is_primary_chromosome(fields[0]))
+                or (primary_chromosomes and fields[0] in primary_chromosomes)
+            ):
                 destination_handle.write("{}\t{}\n".format(fields[0], fields[1]))
     temporary.replace(destination)
 
