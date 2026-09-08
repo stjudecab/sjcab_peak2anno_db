@@ -448,7 +448,7 @@ def _cache_packaged_sizes(species: str, destination: Path) -> Optional[Path]:
         if source.exists():
             shutil.copyfile(source, destination)
             clean_source = source.with_name(source.name + ".clean")
-            return clean_source if clean_source.exists() else None
+            return clean_source if clean_source.is_file() and clean_source.stat().st_size else None
     return None
 
 
