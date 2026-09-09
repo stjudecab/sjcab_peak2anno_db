@@ -12,7 +12,7 @@ from typing import Optional, Sequence
 from ._chromhmm import download_chromhmm
 from ._dedup import dedup_gencode_bed, filter_gencode_bed
 from ._external import CGI_SPECIES, download_cgi, install_blacklists, install_cgi
-from ._gencode import download_and_convert_gencode_gtf
+from ._gencode import download_and_convert_gencode_gtf, resolve_gencode_gtf_url
 from ._install import (
     DEFAULT_GENCODE_FEATURE_SPECS,
     INSTALL_COMPONENTS,
@@ -205,6 +205,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         feature_install_parser,
         include_output_dir=False,
         default_overwrite=False,
+        include_name=True,
     )
 
     bed_install_parser = subparsers.add_parser(
@@ -394,6 +395,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return 0
         if args.command == "install-feature":
             feature_species, feature_version = _gencode_feature_install_scope(args)
+            if args.dry_run:
+                dry_specs = (
+                    DEFAULT_GENCODE_FEATURE_SPECS
+                    if feature_species is None
+                    else _gencode_feature_specs(feature_species, feature_version)
+                )
+                for dry_species, dry_version in dry_specs:
+                    print(resolve_gencode_gtf_url(dry_species, dry_version, cache_dir=args.data_dir))
+                return 0
             target = install_gencode_features(
                 data_dir=args.data_dir,
                 overwrite=args.overwrite,
@@ -410,6 +420,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 include_type=not args.compact_bed,
                 tes_bp=args.tes_bp,
                 progress=_stderr_progress,
+                custom_name=args.name,
             )
             print(target)
             return 0
@@ -446,6 +457,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return 0
         if args.command == "download-feature":
             specs = _gencode_feature_specs(args.species, args.version)
+            if args.dry_run:
+                for dry_species, dry_version in specs:
+                    print(resolve_gencode_gtf_url(dry_species, dry_version, cache_dir=args.data_dir))
+                return 0
             multi_spec = len(specs) > 1
             for feature_species, feature_version in specs:
                 output_dir = _gencode_feature_output_dir(
@@ -693,6 +708,7 @@ def _add_feature_generation_arguments(
     parser: argparse.ArgumentParser,
     include_output_dir: bool,
     default_overwrite: bool = True,
+    include_name: bool = False,
 ) -> None:
     if include_output_dir:
         parser.add_argument(
@@ -756,6 +772,18 @@ def _add_feature_generation_arguments(
         "--compact-bed",
         action="store_true",
         help="When converting GTF, write the compact 8-column gene BED.",
+    )
+    if include_name:
+        parser.add_argument(
+            "-name",
+            dest="name",
+            help="Customize the installed species name and record it in custom.name.tsv.",
+        )
+    parser.add_argument(
+        "-dry-run",
+        dest="dry_run",
+        action="store_true",
+        help="Resolve and print the downloadable GTF URL without downloading.",
     )
     if default_overwrite:
         parser.add_argument(

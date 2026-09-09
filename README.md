@@ -251,7 +251,15 @@ sjcab-peak2anno-db install-feature hg38 v31 -o feature_downloads
 sjcab-peak2anno-db download-feature hg38 v31 -o feature_downloads
 sjcab-peak2anno-db download-feature all all -o feature_downloads
 sjcab-peak2anno-db download-feature hg38 v31 -o feature_downloads -p 2kb -D 50kb -e 2kb
+# Resolve and print the GTF URL without downloading.
+sjcab-peak2anno-db download-feature horse def -dry-run
+# Store one species under a custom name and record the mapping.
+sjcab-peak2anno-db install-feature horse def -name horse_custom
 ```
+
+For `install-feature`, omitting the version is equivalent to using `def`.
+The `-name` mapping is written to `custom.name.tsv` in the selected data
+directory.
 
 `install-feature -o DIR` reuses preprocessed feature files from `DIR`
 when `order.lst` and the expected feature BED files are already present. Like

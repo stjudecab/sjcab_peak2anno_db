@@ -21,6 +21,7 @@ from ._download_log import record_download_url
 from ._registry import data_root, user_data_dir
 
 PathLike = Union[str, os.PathLike]
+_ENSEMBL_CACHE_MAX_AGE = 90 * 24 * 60 * 60
 
 _ATTRIBUTE_RE = re.compile(r'(\S+)\s+"([^"]*)"')
 _ENSEMBL_SPECIES = {
@@ -161,7 +162,7 @@ def ensembl_gtf_url(
     release = str(version).lower().replace("release-", "", 1)
     if release in {"def", "default", "current", "latest"}:
         if metadata is not None:
-            release = str(_latest_ensembl_release(metadata[2]))
+            release = str(_latest_ensembl_release(metadata[2], cache_dir=cache_dir))
         else:
             metadata, release = _resolve_cached_ensembl_species(
                 species, cache_dir=cache_dir
@@ -209,7 +210,7 @@ def ensembl_assembly_name(
     release = str(version).lower().replace("release-", "", 1)
     if release in {"def", "default", "current", "latest"}:
         if metadata is not None:
-            release = str(_latest_ensembl_release(metadata[2]))
+            release = str(_latest_ensembl_release(metadata[2], cache_dir=cache_dir))
         else:
             metadata, release = _resolve_cached_ensembl_species(
                 species, cache_dir=cache_dir
@@ -549,15 +550,17 @@ def _resolve_cached_ensembl_species(
         catalog_root = root / cache_subdir
         catalog_release = requested_release
         if catalog_release is None:
-            catalog_release = _latest_ensembl_release(genomes)
+            catalog_release = _latest_ensembl_release(genomes, cache_dir=cache_dir)
         release_path = catalog_root / str(catalog_release) / filename
         cache_path = release_path
-        if not cache_path.exists():
+        if not cache_path.exists() or _is_stale(cache_path):
             legacy_path = catalog_root / filename
             if legacy_path.exists():
                 release_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(legacy_path, release_path)
                 cache_path = release_path
+            if cache_path.exists() and not _is_stale(cache_path):
+                pass
             else:
                 cache_path = _download_ensembl_species_catalog(
                     _ensembl_release_catalog_url(
@@ -632,6 +635,7 @@ def _download_ensembl_species_catalog(
                 continue
             fields = row.split("\t")
             if len(fields) >= 5:
+                fields = [field.replace(" ", "_") for field in fields]
                 handle.write(
                     "{}\t{}\t{}\t{}\t{}\n".format(
                         fields[4],
@@ -767,33 +771,39 @@ def _refresh_ensembl_default_link(
         default_dir.mkdir(parents=True, exist_ok=True)
 
 
-def _latest_ensembl_release(genomes: bool) -> int:
-    if genomes:
+def _latest_ensembl_release(
+    genomes: bool, cache_dir: Optional[PathLike] = None
+) -> int:
+    root = user_data_dir(cache_dir) / "ensembl" / (
+        "genomes" if genomes else "vertebrates"
+    )
+    version_path = root / "VERSION"
+    if version_path.is_file() and not _is_stale(version_path):
+        value = version_path.read_text(encoding="utf-8").strip()
+    else:
+        version_url = (
+            "https://ftp.ebi.ac.uk/pub/ensemblgenomes/VERSION"
+            if genomes
+            else "https://ftp.ebi.ac.uk/pub/ensembl/VERSION"
+        )
         request = urllib.request.Request(
-            "https://ftp.ebi.ac.uk/pub/ensemblgenomes/VERSION",
-            headers={"User-Agent": "sjcab-peak2anno-db"},
+            version_url, headers={"User-Agent": "sjcab-peak2anno-db"}
         )
         with urllib.request.urlopen(request, timeout=120) as response:
             value = response.read().decode("utf-8", "replace").strip()
-        match = re.search(r"\d+", value)
-        if match is None:
-            raise ValueError("Invalid Ensembl Genomes VERSION value: {!r}.".format(value))
-        return int(match.group(0))
-    version_url = (
-        "https://ftp.ebi.ac.uk/pub/ensemblgenomes/VERSION"
-        if genomes
-        else "https://ftp.ebi.ac.uk/pub/ensembl/VERSION"
-    )
-    request = urllib.request.Request(
-        version_url, headers={"User-Agent": "sjcab-peak2anno-db"}
-    )
-    with urllib.request.urlopen(request, timeout=120) as response:
-        value = response.read().decode("utf-8", "replace").strip()
+        root.mkdir(parents=True, exist_ok=True)
+        temporary = version_path.with_name(version_path.name + ".tmp")
+        temporary.write_text(value + "\n", encoding="utf-8")
+        temporary.replace(version_path)
     match = re.search(r"\d+", value)
     if match is None:
         source = "Ensembl Genomes" if genomes else "Ensembl"
         raise ValueError("Invalid {} VERSION value: {!r}.".format(source, value))
     return int(match.group(0))
+
+
+def _is_stale(path: Path) -> bool:
+    return time.time() - path.stat().st_mtime > _ENSEMBL_CACHE_MAX_AGE
 
 
 def gencode_bed_filename(
@@ -814,6 +824,36 @@ def gencode_bed_dir(output_dir: PathLike, species: str, version: str) -> Path:
     return Path(output_dir).expanduser() / "bed" / species / version
 
 
+def resolve_gencode_gtf_url(
+    species: str,
+    version: str,
+    gtf_url: Optional[str] = None,
+    source: str = "auto",
+    cache_dir: Optional[PathLike] = None,
+    ucsc_annotation: str = "ens",
+) -> str:
+    """Resolve the downloadable GTF URL without downloading it."""
+
+    if gtf_url:
+        return gtf_url
+    source_key = source.lower()
+    if source_key == "auto":
+        source_key = (
+            "gencode"
+            if species.lower()
+            in {"hg19", "hg38", "grch37", "grch38", "mm9", "mm10", "mm39"}
+            else "ensembl"
+        )
+    if source_key == "ensembl":
+        try:
+            return ucsc_gtf_url(species, ucsc_annotation, cache_dir=cache_dir)
+        except (OSError, ValueError):
+            return ensembl_gtf_url(species, version, cache_dir=cache_dir)
+    if source_key == "ucsc":
+        return ucsc_gtf_url(species, ucsc_annotation, cache_dir=cache_dir)
+    return gencode_gtf_url(species, version)
+
+
 def download_gencode_gtf(
     species: str,
     version: str,
@@ -830,25 +870,19 @@ def download_gencode_gtf(
 
     output = Path(output_dir).expanduser()
     output.mkdir(parents=True, exist_ok=True)
-    if gtf_url:
-        url = gtf_url
-    elif source.lower() == "auto":
-        source = "gencode" if species.lower() in {
-            "hg19", "hg38", "grch37", "grch38", "mm9", "mm10", "mm39",
-        } else "ensembl"
-        if source == "ensembl":
-            try:
-                url = ucsc_gtf_url(species, ucsc_annotation, cache_dir=cache_dir)
-            except (OSError, ValueError):
-                url = ensembl_gtf_url(species, version, cache_dir=cache_dir)
-        else:
-            url = gencode_gtf_url(species, version)
-    elif source.lower() == "ensembl":
-        url = ensembl_gtf_url(species, version, cache_dir=cache_dir)
-    elif source.lower() == "ucsc":
-        url = ucsc_gtf_url(species, ucsc_annotation, cache_dir=cache_dir)
-    else:
-        url = gencode_gtf_url(species, version)
+    selected_source = source.lower()
+    if selected_source == "auto" and species.lower() not in {
+        "hg19", "hg38", "grch37", "grch38", "mm9", "mm10", "mm39",
+    }:
+        selected_source = "ensembl"
+    url = resolve_gencode_gtf_url(
+        species,
+        version,
+        gtf_url=gtf_url,
+        source=source,
+        cache_dir=cache_dir,
+        ucsc_annotation=ucsc_annotation,
+    )
     filename = url.rstrip("/").split("/")[-1]
     cache_root = user_data_dir(cache_dir) / "cache"
     cache_root.mkdir(parents=True, exist_ok=True)
@@ -869,7 +903,7 @@ def download_gencode_gtf(
             _download_file(url, destination, progress=progress)
     except RuntimeError as error:
         if not (
-            source.lower() in {"auto", "ensembl"}
+            selected_source in {"auto", "ensembl"}
             and _is_http_404(error)
         ):
             raise

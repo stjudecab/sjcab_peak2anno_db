@@ -145,6 +145,7 @@ def install_gencode_features(
     cache_dir: Optional[object] = None,
     ucsc_annotation: str = "ens",
     clean_cache: bool = False,
+    custom_name: Optional[str] = None,
 ) -> Path:
     """Install bundled derived annotations and downloaded GENCODE features.
 
@@ -186,6 +187,7 @@ def install_gencode_features(
             cache_dir=cache_dir,
             ucsc_annotation=ucsc_annotation,
             clean_cache=clean_cache,
+            custom_name=custom_name,
             skip_existing=_can_skip_existing_feature_install(
                 source_dir=output_dir,
                 gtf_path=gtf_path,
@@ -224,11 +226,15 @@ def install_gencode_feature_set(
     cache_dir: Optional[object] = None,
     ucsc_annotation: str = "ens",
     clean_cache: bool = False,
+    custom_name: Optional[str] = None,
 ) -> Path:
     """Install one downloaded GENCODE feature set into the cache."""
 
     target_root = user_data_dir(data_dir)
-    storage_species = data_species_name(species, version, cache_dir=cache_dir)
+    assembly_name = data_species_name(species, version, cache_dir=cache_dir)
+    storage_species = custom_name or assembly_name
+    if custom_name:
+        _write_custom_name_mapping(target_root, assembly_name, custom_name)
     label = gencode_feature_prefix(promoter_bp=promoter_bp, prefix=prefix)
     species_dir = target_root / GENCODE_FEATURE_DIR_NAME / storage_species
     version_dir = species_dir / version
@@ -333,6 +339,27 @@ def install_gencode_feature_set(
         ),
     )
     return feature_dir
+
+
+def _write_custom_name_mapping(
+    target_root: Path, assembly_name: str, custom_name: str
+) -> None:
+    """Record the relationship between an assembly and a custom storage name."""
+
+    mapping_path = target_root / "custom.name.tsv"
+    existing = {}
+    if mapping_path.exists():
+        for line in mapping_path.read_text(encoding="utf-8").splitlines()[1:]:
+            fields = line.split("\t")
+            if len(fields) >= 2:
+                existing[fields[0]] = fields[1]
+    existing[assembly_name] = custom_name
+    temporary = mapping_path.with_name(mapping_path.name + ".tmp")
+    with temporary.open("w", encoding="utf-8") as handle:
+        handle.write("assembly\tcustom_name\n")
+        for assembly, name in sorted(existing.items()):
+            handle.write("{}\t{}\n".format(assembly, name))
+    temporary.replace(mapping_path)
 
 
 def update_data(data_dir: Optional[object] = None) -> Path:
