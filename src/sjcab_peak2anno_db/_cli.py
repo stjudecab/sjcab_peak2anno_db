@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import time
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -102,6 +103,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="Component to install. Can be passed more than once.",
     )
     install_parser.add_argument("-d", "--data-dir", help="Generated annotation directory.")
+    install_parser.add_argument(
+        "--ucsc-source",
+        choices=("ens", "refseq"),
+        default="ens",
+        help="UCSC gene annotation when a UCSC build is selected.",
+    )
+    install_parser.add_argument(
+        "--clean-cache",
+        action="store_true",
+        help="Delete downloaded GTFs from the cache after conversion.",
+    )
     install_overwrite_group = install_parser.add_mutually_exclusive_group()
     install_overwrite_group.add_argument(
         "-n",
@@ -267,7 +279,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     gencode_parser.add_argument(
         "--clean-cache",
         action="store_true",
-        help="Delete the downloaded GTF from cachegtf after conversion.",
+        help="Delete the downloaded GTF from cache after conversion.",
     )
     gencode_parser.add_argument(
         "-b",
@@ -700,7 +712,7 @@ def _add_feature_generation_arguments(
     parser.add_argument(
         "--clean-cache",
         action="store_true",
-        help="Delete the downloaded GTF from cachegtf after conversion.",
+        help="Delete the downloaded GTF from cache after conversion.",
     )
     parser.add_argument(
         "-b",
@@ -952,10 +964,12 @@ def _gencode_feature_install_scope(args: argparse.Namespace) -> tuple:
         return None, None
     species = args.species or args.species_option
     version = args.version or args.version_option
-    if not species or not version:
+    if not species:
         raise ValueError(
-            "install-feature requires species and version, or --all."
+            "install-feature requires species, or --all."
         )
+    if version is None:
+        version = "def"
     return species, version
 
 
@@ -998,7 +1012,7 @@ def _gencode_feature_output_label(promoter_bp: str, prefix: Optional[str]) -> st
 
 def _stderr_progress(message: str) -> None:
     if message.startswith("download ") and message.endswith(":"):
-        print(message, end="", file=sys.stderr, flush=True)
+        print(_log_time_prefix() + message, end="", file=sys.stderr, flush=True)
         return
     if re.fullmatch(r"\d+\.\.", message):
         print(message, end="", file=sys.stderr, flush=True)
@@ -1006,7 +1020,13 @@ def _stderr_progress(message: str) -> None:
     if message == "done":
         print(message, file=sys.stderr, flush=True)
         return
-    print(message, file=sys.stderr, flush=True)
+    print(_log_time_prefix() + message, file=sys.stderr, flush=True)
+
+
+def _log_time_prefix() -> str:
+    """Return a second-resolution timestamp for CLI progress log lines."""
+
+    return time.strftime("[%H:%M:%S] ")
 
 
 def _print_list(

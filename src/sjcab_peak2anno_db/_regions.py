@@ -7,6 +7,7 @@ import os
 import random
 import re
 import shutil
+import subprocess
 import time
 import urllib.parse
 import urllib.request
@@ -14,12 +15,15 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
 from ._download import ProgressCallback, report_progress
+from ._download_log import record_download_url
 from ._derive import _parse_bed_fields, _site_interval
 from ._gencode import (
     _ENSEMBL_SPECIES,
     _open_text,
     _parse_attributes,
     _download_ucsc_primary_chromosomes,
+    ensembl_assembly_accession,
+    _match_ucsc_build,
     _ucsc_gtf_builds,
     convert_gencode_gtf_to_bed,
     download_gencode_gtf,
@@ -42,6 +46,7 @@ GENCODE_FEATURE_LIST_ORDER = (
     "dis3",
     "intergenic",
 )
+_NCBI_EUTILS_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/{}"
 
 
 def write_tss_flank_region_unions(
@@ -151,6 +156,7 @@ def download_gencode_feature(
     cache_dir: Optional[PathLike] = None,
     ucsc_annotation: str = "ens",
     clean_cache: bool = False,
+    data_species: Optional[str] = None,
     *,
     gene_bed_output: Optional[PathLike] = None,
 ) -> Mapping[str, Path]:
@@ -160,10 +166,10 @@ def download_gencode_feature(
     target_dir.mkdir(parents=True, exist_ok=True)
     report_progress(
         progress,
-        "download-gencode-feature {} {}: started".format(species, version),
+        "download-feature {} {}: started".format(species, version),
     )
 
-    report_progress(progress, "download-gencode-feature: preparing GTF")
+    report_progress(progress, "download-feature: preparing GTF")
     gtf_for_regions = _resolve_gtf_for_regions(
         species,
         version,
@@ -177,34 +183,32 @@ def download_gencode_feature(
         cache_dir=cache_dir,
         ucsc_annotation=ucsc_annotation,
     )
-    report_progress(progress, "download-gencode-feature: GTF ready")
 
     if gene_bed is None:
         if gene_bed_output is None:
             gene_bed = target_dir / gencode_bed_filename(
-                species, version, include_type=include_type
+                data_species or species, version, include_type=include_type
             )
         else:
             gene_bed = Path(gene_bed_output).expanduser()
         if overwrite or not Path(gene_bed).exists():
-            report_progress(progress, "download-gencode-feature: converting gene BED")
+            report_progress(progress, "download-feature: converting gene BED")
             convert_gencode_gtf_to_bed(
                 gtf_for_regions,
                 gene_bed,
                 include_type=include_type,
             )
-            report_progress(progress, "download-gencode-feature: gene BED done")
     else:
         gene_bed = Path(gene_bed).expanduser()
         report_progress(
             progress,
-            "download-gencode-feature: using existing gene BED {}".format(gene_bed),
+            "download-feature: using existing gene BED {}".format(gene_bed),
         )
 
     label = gencode_feature_prefix(promoter_bp=promoter_bp, prefix=prefix)
     report_progress(
         progress,
-        "download-gencode-feature: writing legacy feature BED files",
+        "download-feature: writing legacy feature BED files",
     )
     outputs = write_legacy_gencode_feature_unions(
         gene_bed,
@@ -215,20 +219,25 @@ def download_gencode_feature(
         tes_bp=tes_bp,
         prefix=label,
         split_tss=split_tss,
-        chrom_sizes=_resolve_species_chrom_sizes(species),
+        chrom_sizes=_resolve_species_chrom_sizes(
+            data_species or species,
+            assembly_accession=ensembl_assembly_accession(species, version, cache_dir)
+            if data_species and data_species != species
+            else None,
+            fallback_species=species,
+        ),
     )
-    report_progress(progress, "download-gencode-feature: legacy BED files done")
+    report_progress(progress, "download-feature: legacy BED files done")
     outputs["list"] = write_gencode_feature_list(outputs, target_dir, label)
     if clean_cache and gtf_path is None:
         cached_path = Path(gtf_for_regions)
-        cache_root = user_data_dir(cache_dir) / "cachegtf"
+        cache_root = user_data_dir(cache_dir) / "cache"
         if cached_path.parent == cache_root and cached_path.exists():
             cached_path.unlink()
-    report_progress(progress, "download-gencode-feature: feature list done")
     outputs["gene_bed"] = Path(gene_bed).expanduser()
     report_progress(
         progress,
-        "download-gencode-feature {} {}: done".format(species, version),
+        "download-feature {} {}: done".format(species, version),
     )
     return outputs
 
@@ -314,6 +323,7 @@ def write_legacy_gencode_feature_unions(
     prefix: Optional[str] = None,
     split_tss: bool = True,
     chrom_sizes: Optional[PathLike] = None,
+    backend: str = "auto",
 ) -> Mapping[str, Path]:
     """Write legacy CAB/``annotate_prep.sh`` feature BED classes.
 
@@ -322,6 +332,10 @@ def write_legacy_gencode_feature_unions(
     strand-aware downstream TES flank, ``tes`` is the merged two-sided TES
     flank, introns overlapping more than ten merged promoter-up intervals are
     removed, and intergenic is the complement of all generated feature classes.
+
+    ``backend="auto"`` prefers ``pybedtools``, then the ``bedtools`` command,
+    and finally the built-in writer. The accelerated backends are optional and
+    only affect serialization of the already-computed intervals.
     """
 
     promoter = _parse_bp(promoter_bp)
@@ -354,6 +368,7 @@ def write_legacy_gencode_feature_unions(
             parsed.intervals[region_type],
             parsed.chrom_order,
             output_path,
+            backend=backend,
         )
         outputs[region_type] = output_path
     return outputs
@@ -398,19 +413,29 @@ def _resolve_gtf_for_regions(
     )
 
 
-def _resolve_species_chrom_sizes(species: str) -> Optional[Path]:
+def _resolve_species_chrom_sizes(
+    species: str,
+    assembly_accession: Optional[str] = None,
+    fallback_species: Optional[str] = None,
+) -> Optional[Path]:
     cache_dir = user_data_dir() / "sizes"
     cache_dir.mkdir(parents=True, exist_ok=True)
     raw_path = cache_dir / "{}.sizes".format(species)
     clean_path = cache_dir / "{}.sizes.clean".format(species)
 
     packaged_clean = _cache_packaged_sizes(species, raw_path)
+    ucsc_build = _match_ucsc_build(species, _ucsc_gtf_builds())
     if not raw_path.exists():
         try:
-            if species in _ucsc_gtf_builds():
-                _download_ucsc_sizes(species, raw_path)
+            if ucsc_build is not None:
+                _download_ucsc_sizes(ucsc_build, raw_path)
             else:
-                _download_ensembl_sizes(species, raw_path)
+                _download_ensembl_sizes(
+                    species,
+                    raw_path,
+                    assembly_accession,
+                    fallback_species=fallback_species,
+                )
         except (OSError, ValueError, KeyError, json.JSONDecodeError):
             pass
     candidates = (
@@ -428,13 +453,19 @@ def _resolve_species_chrom_sizes(species: str) -> Optional[Path]:
     if not clean_path.exists():
         if packaged_clean is not None and packaged_clean.exists():
             shutil.copyfile(packaged_clean, clean_path)
-        elif species in _ucsc_gtf_builds():
+        elif ucsc_build is not None:
             _write_clean_chrom_sizes(
-                raw_path, clean_path, _download_ucsc_primary_chromosomes(species)
+                raw_path, clean_path, _download_ucsc_primary_chromosomes(ucsc_build)
             )
         else:
             _write_clean_chrom_sizes(
-                raw_path, clean_path, _download_ensembl_primary_chromosomes(species)
+                raw_path,
+                clean_path,
+                _download_ensembl_primary_chromosomes(
+                    species,
+                    assembly_accession,
+                    fallback_species=fallback_species,
+                ),
             )
     return clean_path
 
@@ -461,28 +492,122 @@ def _download_ucsc_sizes(species: str, destination: Path) -> None:
     _write_sizes_from_text(url, destination)
 
 
-def _download_ensembl_sizes(species: str, destination: Path) -> None:
-    payload = _fetch_ensembl_assembly(species)
-    rows = payload.get("top_level_region", [])
-    _write_sizes(
-        destination,
-        ((row["name"], row["length"]) for row in rows if "name" in row),
+def _download_ensembl_sizes(
+    species: str,
+    destination: Path,
+    assembly_accession: Optional[str] = None,
+    fallback_species: Optional[str] = None,
+) -> None:
+    if assembly_accession and assembly_accession.upper().startswith("GCF_"):
+        try:
+            report = _download_gcf_assembly_report(assembly_accession)
+            rows = _assembly_report_sizes(report)
+            if rows:
+                _write_sizes(destination, rows)
+                return
+        except (OSError, ValueError, KeyError, json.JSONDecodeError):
+            pass
+    _download_ucsc_sizes(fallback_species or species, destination)
+
+
+def _download_ensembl_primary_chromosomes(
+    species: str,
+    assembly_accession: Optional[str] = None,
+    fallback_species: Optional[str] = None,
+):
+    if assembly_accession and assembly_accession.upper().startswith("GCF_"):
+        try:
+            report = _download_gcf_assembly_report(assembly_accession)
+            primary = _assembly_report_primary_chromosomes(report)
+            if primary:
+                return primary
+        except (OSError, ValueError, KeyError, json.JSONDecodeError):
+            pass
+    return _download_ucsc_primary_chromosomes(fallback_species or species)
+
+
+def _download_gcf_assembly_report(assembly_accession: str) -> str:
+    """Fetch an NCBI assembly report for a RefSeq GCF accession."""
+
+    search_url = "{}?db=assembly&term={}".format(
+        _NCBI_EUTILS_URL.format("esearch.fcgi"),
+        urllib.parse.quote('"{}"[Assembly Accession]'.format(assembly_accession)),
     )
+    search_payload = urllib.request.urlopen(search_url, timeout=120).read().decode(
+        "utf-8", "replace"
+    )
+    ids = re.findall(r"<Id>(\d+)</Id>", search_payload)
+    if not ids:
+        raise ValueError("NCBI Assembly search found no GCF record for {!r}".format(assembly_accession))
 
-
-def _download_ensembl_primary_chromosomes(species: str):
-    payload = _fetch_ensembl_assembly(species)
-    karyotype = set(payload.get("karyotype", []))
-    return {
-        row["name"]
-        for row in payload.get("top_level_region", [])
-        if "name" in row
-        and (
-            row.get("coord_system") == "chromosome"
-            or row.get("coord_system") == "primary_assembly"
-            and row["name"] in karyotype
+    summary_url = "{}?db=assembly&id={}&retmode=json".format(
+        _NCBI_EUTILS_URL.format("esummary.fcgi"), ",".join(ids[:20])
+    )
+    summary = json.loads(
+        urllib.request.urlopen(summary_url, timeout=120).read().decode(
+            "utf-8", "replace"
         )
+    )
+    documents = summary.get("result", {})
+    document = documents.get(ids[0], {})
+    for candidate_id in summary.get("result", {}).get("uids", []):
+        candidate = documents.get(candidate_id, {})
+        if candidate.get("assemblyaccession", "").upper() == assembly_accession.upper():
+            document = candidate
+            break
+    report_url = document.get("ftppath_assembly_rpt")
+    if not report_url:
+        raise ValueError(
+            "NCBI Assembly summary has no report for {!r}".format(assembly_accession)
+        )
+    report_url = report_url.replace("ftp://", "https://")
+    report = urllib.request.urlopen(report_url, timeout=120).read().decode(
+        "utf-8", "replace"
+    )
+    record_download_url(search_url)
+    record_download_url(summary_url)
+    record_download_url(report_url)
+    return report
+
+
+def _assembly_report_rows(report: str):
+    for line in report.splitlines():
+        if not line or line.startswith("#"):
+            continue
+        fields = line.split("\t")
+        if len(fields) > 8 and fields[1] == "assembled-molecule":
+            yield fields
+
+
+def _assembly_report_sizes(report: str):
+    rows = []
+    for fields in _assembly_report_rows(report):
+        try:
+            rows.append((fields[0], int(fields[8])))
+        except (IndexError, ValueError):
+            continue
+    return rows
+
+
+def _assembly_report_primary_chromosomes(report: str):
+    return {
+        fields[0]
+        for fields in _assembly_report_rows(report)
+        if fields[0] and fields[0] != "na"
     }
+
+
+def _fetch_ensembl_assembly_with_fallback(
+    species: str, assembly_accession: Optional[str] = None
+):
+    """Fetch by accession when available, then retain the species fallback."""
+
+    if assembly_accession:
+        try:
+            return _fetch_ensembl_assembly(assembly_accession)
+        except (OSError, ValueError, KeyError, json.JSONDecodeError):
+            pass
+    return _fetch_ensembl_assembly(species)
 
 
 def _fetch_ensembl_assembly(species: str):
@@ -1337,17 +1462,98 @@ def _write_intervals(
     intervals_by_chrom: Mapping[str, List[Tuple[int, int]]],
     chrom_order: Tuple[str, ...],
     output_path: Path,
+    backend: str = "auto",
 ) -> None:
     tmp_path = output_path.with_name(output_path.name + ".tmp")
+    records_path = output_path.with_name(output_path.name + ".records.tmp")
+    genome_path = output_path.with_name(output_path.name + ".genome.tmp")
     try:
-        with tmp_path.open("w", encoding="utf-8") as handle:
+        with records_path.open("w", encoding="utf-8") as handle:
             for chrom in chrom_order:
                 for start, end in intervals_by_chrom.get(chrom, []):
                     handle.write("{}\t{}\t{}\n".format(chrom, start, end))
+        with genome_path.open("w", encoding="utf-8") as handle:
+            for chrom in chrom_order:
+                max_end = max(
+                    (end for _start, end in intervals_by_chrom.get(chrom, [])),
+                    default=1,
+                )
+                handle.write("{}\t{}\n".format(chrom, max_end))
+        if backend not in {"auto", "pybedtools", "bedtools", "python"}:
+            raise ValueError(
+                "Unknown BED writer backend {!r}; choose auto, pybedtools, "
+                "bedtools, or python.".format(backend)
+            )
+
+        if backend in {"auto", "pybedtools"}:
+            if _write_intervals_pybedtools(records_path, genome_path, tmp_path):
+                records_path.unlink()
+                genome_path.unlink()
+                tmp_path.replace(output_path)
+                return
+            if backend == "pybedtools":
+                raise RuntimeError("pybedtools BED writer failed.")
+
+        if backend in {"auto", "bedtools"}:
+            if _write_intervals_bedtools(records_path, genome_path, tmp_path):
+                records_path.unlink()
+                genome_path.unlink()
+                tmp_path.replace(output_path)
+                return
+            if backend == "bedtools":
+                raise RuntimeError("bedtools BED writer failed or is unavailable.")
+
+        with tmp_path.open("w", encoding="utf-8") as handle:
+            with records_path.open("r", encoding="utf-8") as records:
+                shutil.copyfileobj(records, handle)
+        records_path.unlink()
+        genome_path.unlink()
         tmp_path.replace(output_path)
     finally:
+        if records_path.exists():
+            records_path.unlink()
+        if genome_path.exists():
+            genome_path.unlink()
         if tmp_path.exists():
             tmp_path.unlink()
+
+
+def _write_intervals_pybedtools(
+    records_path: Path, genome_path: Path, output_path: Path
+) -> bool:
+    """Sort and write BED records through optional pybedtools."""
+
+    try:
+        from pybedtools import BedTool
+
+        BedTool(str(records_path)).sort(g=str(genome_path)).saveas(str(output_path))
+        return True
+    except (ImportError, OSError, RuntimeError, ValueError):
+        return False
+
+
+def _write_intervals_bedtools(
+    records_path: Path, genome_path: Path, output_path: Path
+) -> bool:
+    """Sort and write BED records through an optional bedtools executable."""
+
+    executable = shutil.which("bedtools")
+    if executable is None:
+        return False
+    try:
+        with output_path.open("w", encoding="utf-8") as handle:
+            subprocess.run(
+                [executable, "sort", "-faidx", str(genome_path), "-i", str(records_path)],
+                check=True,
+                stdout=handle,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+        return True
+    except (OSError, subprocess.SubprocessError):
+        if output_path.exists():
+            output_path.unlink()
+        return False
 
 
 def _merge_intervals(

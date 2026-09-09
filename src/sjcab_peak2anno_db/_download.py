@@ -52,6 +52,10 @@ def download_file(
             else:
                 _copy_with_percent_progress(response, output, size, label, progress)
         tmp_path.replace(destination)
+    except Exception as exc:
+        raise RuntimeError(
+            "Download failed for URL {!r}: {}".format(url, exc)
+        ) from exc
     finally:
         if tmp_path.exists():
             tmp_path.unlink()

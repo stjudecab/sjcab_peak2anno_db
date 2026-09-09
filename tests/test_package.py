@@ -138,14 +138,55 @@ def test_download_file_reports_every_five_percent(monkeypatch, tmp_path):
     assert (tmp_path / "file.bed").read_text(encoding="utf-8") == "x" * 100
 
 
-def test_cli_progress_appends_download_percent_fragments(capsys):
+def test_download_file_error_includes_attempted_url(monkeypatch, tmp_path):
+    def fail_urlopen(url, timeout):
+        raise OSError("network unavailable")
+
+    monkeypatch.setattr(download.urllib.request, "urlopen", fail_urlopen)
+
+    try:
+        download.download_file(
+            "https://example.org/missing.gtf.gz",
+            tmp_path / "missing.gtf.gz",
+        )
+    except RuntimeError as exc:
+        assert str(exc) == (
+            "Download failed for URL 'https://example.org/missing.gtf.gz': "
+            "network unavailable"
+        )
+    else:
+        raise AssertionError("download_file should report download failures")
+
+
+def test_ucsc_gtf_url_matches_build_case_insensitively(monkeypatch):
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return b'<a href="hg38.ensGene.gtf.gz">hg38.ensGene.gtf.gz</a>'
+
+    monkeypatch.setattr(gencode, "_ucsc_gtf_builds", lambda _cache_dir=None: {"hg38"})
+    monkeypatch.setattr(gencode.urllib.request, "urlopen", lambda *args, **kwargs: FakeResponse())
+
+    assert gencode.ucsc_gtf_url("HG38") == (
+        "https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/genes/"
+        "hg38.ensGene.gtf.gz"
+    )
+
+
+def test_cli_progress_appends_download_percent_fragments(monkeypatch, capsys):
+    monkeypatch.setattr(cli.time, "strftime", lambda _format: "[12:34:56] ")
     cli._stderr_progress("download E063_18_core_K27ac_dense.bed.gz:")
     cli._stderr_progress("5..")
     cli._stderr_progress("10..")
     cli._stderr_progress("done")
 
     captured = capsys.readouterr()
-    assert captured.err == "download E063_18_core_K27ac_dense.bed.gz:5..10..done\n"
+    assert captured.err == "[12:34:56] download E063_18_core_K27ac_dense.bed.gz:5..10..done\n"
 
 
 def test_default_version_uses_registry_defined_version_not_largest():
@@ -364,11 +405,22 @@ def test_download_gencode_bed_writes_version_layout(tmp_path):
 def test_install_accepts_component_names(monkeypatch, tmp_path):
     called = {}
 
-    def fake_install(data_dir=None, overwrite=True, components=None, progress=None):
+    def fake_install(
+        data_dir=None,
+        overwrite=True,
+        components=None,
+        progress=None,
+        cache_dir=None,
+        ucsc_annotation="ens",
+        clean_cache=False,
+    ):
         called["data_dir"] = data_dir
         called["overwrite"] = overwrite
         called["components"] = components
         called["progress"] = progress
+        called["cache_dir"] = cache_dir
+        called["ucsc_annotation"] = ucsc_annotation
+        called["clean_cache"] = clean_cache
         return tmp_path
 
     monkeypatch.setattr(cli, "install_data", fake_install)
@@ -377,11 +429,14 @@ def test_install_accepts_component_names(monkeypatch, tmp_path):
         cli.main(
             [
                 "install",
-                "gencode-bed",
+                "anno-bed",
                 "cgi",
                 "--data-dir",
                 str(tmp_path),
                 "--no-overwrite",
+                "--ucsc-source",
+                "refseq",
+                "--clean-cache",
             ]
         )
         == 0
@@ -389,19 +444,33 @@ def test_install_accepts_component_names(monkeypatch, tmp_path):
     assert called == {
         "data_dir": str(tmp_path),
         "overwrite": False,
-        "components": ["gencode-bed", "cgi"],
+        "components": ["anno-bed", "cgi"],
         "progress": cli._stderr_progress,
+        "cache_dir": str(tmp_path),
+        "ucsc_annotation": "refseq",
+        "clean_cache": True,
     }
 
 
 def test_cli_install_without_components_uses_default_selection(monkeypatch, tmp_path):
     called = {}
 
-    def fake_install(data_dir=None, overwrite=True, components=None, progress=None):
+    def fake_install(
+        data_dir=None,
+        overwrite=True,
+        components=None,
+        progress=None,
+        cache_dir=None,
+        ucsc_annotation="ens",
+        clean_cache=False,
+    ):
         called["data_dir"] = data_dir
         called["overwrite"] = overwrite
         called["components"] = components
         called["progress"] = progress
+        called["cache_dir"] = cache_dir
+        called["ucsc_annotation"] = ucsc_annotation
+        called["clean_cache"] = clean_cache
         return tmp_path
 
     monkeypatch.setattr(cli, "install_data", fake_install)
@@ -412,17 +481,31 @@ def test_cli_install_without_components_uses_default_selection(monkeypatch, tmp_
         "overwrite": False,
         "components": None,
         "progress": cli._stderr_progress,
+        "cache_dir": str(tmp_path),
+        "ucsc_annotation": "ens",
+        "clean_cache": False,
     }
 
 
 def test_cli_install_accepts_explicit_overwrite(monkeypatch, tmp_path):
     called = {}
 
-    def fake_install(data_dir=None, overwrite=True, components=None, progress=None):
+    def fake_install(
+        data_dir=None,
+        overwrite=True,
+        components=None,
+        progress=None,
+        cache_dir=None,
+        ucsc_annotation="ens",
+        clean_cache=False,
+    ):
         called["data_dir"] = data_dir
         called["overwrite"] = overwrite
         called["components"] = components
         called["progress"] = progress
+        called["cache_dir"] = cache_dir
+        called["ucsc_annotation"] = ucsc_annotation
+        called["clean_cache"] = clean_cache
         return tmp_path
 
     monkeypatch.setattr(cli, "install_data", fake_install)
@@ -433,17 +516,31 @@ def test_cli_install_accepts_explicit_overwrite(monkeypatch, tmp_path):
         "overwrite": True,
         "components": None,
         "progress": cli._stderr_progress,
+        "cache_dir": str(tmp_path),
+        "ucsc_annotation": "ens",
+        "clean_cache": False,
     }
 
 
 def test_install_accepts_short_component_options(monkeypatch, tmp_path):
     called = {}
 
-    def fake_install(data_dir=None, overwrite=True, components=None, progress=None):
+    def fake_install(
+        data_dir=None,
+        overwrite=True,
+        components=None,
+        progress=None,
+        cache_dir=None,
+        ucsc_annotation="ens",
+        clean_cache=False,
+    ):
         called["data_dir"] = data_dir
         called["overwrite"] = overwrite
         called["components"] = components
         called["progress"] = progress
+        called["cache_dir"] = cache_dir
+        called["ucsc_annotation"] = ucsc_annotation
+        called["clean_cache"] = clean_cache
         return tmp_path
 
     monkeypatch.setattr(cli, "install_data", fake_install)
@@ -453,7 +550,7 @@ def test_install_accepts_short_component_options(monkeypatch, tmp_path):
             [
                 "install",
                 "-c",
-                "gencode-bed",
+                "anno-bed",
                 "-c",
                 "cgi",
                 "-d",
@@ -466,8 +563,11 @@ def test_install_accepts_short_component_options(monkeypatch, tmp_path):
     assert called == {
         "data_dir": str(tmp_path),
         "overwrite": False,
-        "components": ["gencode-bed", "cgi"],
+        "components": ["anno-bed", "cgi"],
         "progress": cli._stderr_progress,
+        "cache_dir": str(tmp_path),
+        "ucsc_annotation": "ens",
+        "clean_cache": False,
     }
 
 
@@ -475,11 +575,11 @@ def test_install_data_default_installs_expected_components(monkeypatch, tmp_path
     calls = []
 
     def fake_gencode_beds(data_dir=None, overwrite=True):
-        calls.append(("gencode-bed", data_dir, overwrite))
+        calls.append(("anno-bed", data_dir, overwrite))
         return tmp_path
 
-    def fake_gencode_features(data_dir=None, overwrite=True, progress=None):
-        calls.append(("gencode-feature", data_dir, overwrite))
+    def fake_gencode_features(data_dir=None, overwrite=True, progress=None, **kwargs):
+        calls.append(("anno-feature", data_dir, overwrite))
         return tmp_path
 
     def fake_blacklists(data_dir=None, overwrite=True):
@@ -501,8 +601,8 @@ def test_install_data_default_installs_expected_components(monkeypatch, tmp_path
 
     assert install.install_data(data_dir=tmp_path, overwrite=False) == tmp_path
     assert calls == [
-        ("gencode-bed", tmp_path, False),
-        ("gencode-feature", tmp_path, False),
+        ("anno-bed", tmp_path, False),
+        ("anno-feature", tmp_path, False),
         ("blacklists", tmp_path, False),
         ("cgi", tmp_path, False),
         ("manifest", tmp_path, None),
@@ -1640,6 +1740,20 @@ def test_write_gencode_region_unions_from_gtf(tmp_path):
     )
 
 
+def test_interval_writer_auto_backend_preserves_chromosome_order(tmp_path):
+    intervals = {"chr2": [(4, 8)], "chr1": [(1, 3), (10, 12)]}
+    chrom_order = ("chr2", "chr1")
+
+    python_path = tmp_path / "python.bed"
+    auto_path = tmp_path / "auto.bed"
+    regions._write_intervals(intervals, chrom_order, python_path, backend="python")
+    regions._write_intervals(intervals, chrom_order, auto_path, backend="auto")
+
+    expected = "chr2\t4\t8\nchr1\t1\t3\nchr1\t10\t12\n"
+    assert python_path.read_text(encoding="utf-8") == expected
+    assert auto_path.read_text(encoding="utf-8") == expected
+
+
 def test_download_gencode_regions_writes_gtf_derived_beds(tmp_path):
     gtf = _write_mini_gencode_region_gtf(tmp_path)
 
@@ -1714,6 +1828,7 @@ def test_install_gencode_feature_set_uses_feature_prefix_layout(tmp_path):
     assert (feature_dir / "2kb.promoter.bed").exists()
     assert not (feature_dir / "gencode.v31.hg38.gene.bed.withtype").exists()
     assert (tmp_path / "bed" / "hg38" / "v31" / "all.gene.bed").exists()
+    assert (tmp_path / "bed" / "hg38" / "v31" / "deduplong.gene.bed").exists()
     assert (feature_dir / "order.lst").read_text(encoding="utf-8") == (
         "2kb.promoter.up.bed\n"
         "2kb.promoter.down.bed\n"
@@ -2017,6 +2132,74 @@ def test_ensembl_gtf_url_uses_cached_genomes_species(monkeypatch, tmp_path):
         "https://ftp.ebi.ac.uk/pub/ensemblgenomes/release-63/protists/gtf/"
         "bigelowiella_natans/Bigelowiella_natans.Bigna1.63.gtf.gz"
     )
+
+
+def test_ensembl_default_uses_version_file_and_creates_default_link(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("SJCAB_PEAK2ANNO_DB_PATH", str(tmp_path))
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return b"116\n"
+
+    requested = []
+
+    def fake_urlopen(request, timeout):
+        requested.append(request.full_url)
+        return FakeResponse()
+
+    monkeypatch.setattr(gencode.urllib.request, "urlopen", fake_urlopen)
+
+    assert gencode._latest_ensembl_release(False) == 116
+    assert gencode._latest_ensembl_release(True) == 116
+    assert requested == [
+        "https://ftp.ebi.ac.uk/pub/ensembl/VERSION",
+        "https://ftp.ebi.ac.uk/pub/ensemblgenomes/VERSION",
+    ]
+
+    gencode._refresh_ensembl_default_link(116, genomes=False)
+    release_dir = tmp_path / "ensembl" / "vertebrates" / "116"
+    default_link = tmp_path / "ensembl" / "vertebrates" / "def"
+    assert release_dir.is_dir()
+    assert default_link.is_symlink()
+    assert default_link.resolve() == release_dir
+
+    gencode._refresh_ensembl_default_link(116, genomes=True)
+    genomes_release_dir = tmp_path / "ensembl" / "genomes" / "116"
+    genomes_default_link = tmp_path / "ensembl" / "genomes" / "def"
+    assert genomes_release_dir.is_dir()
+    assert genomes_default_link.is_symlink()
+    assert genomes_default_link.resolve() == genomes_release_dir
+
+
+def test_data_species_name_uses_ensembl_assembly_only(monkeypatch):
+    monkeypatch.setattr(gencode, "_latest_ensembl_release", lambda _genomes: 116)
+    monkeypatch.setattr(gencode, "_ucsc_gtf_builds", lambda _cache_dir=None: {"canFam3"})
+
+    assert gencode.data_species_name("dog", "def") == "ROS_Cfam_1.0"
+    assert gencode.data_species_name("canfam3", "def") == "canFam3"
+    assert gencode.data_species_name("hg38", "def") == "hg38"
+
+
+def test_ensembl_species_candidates_ignore_empty_legacy_fields(tmp_path):
+    catalog = tmp_path / "species.txt"
+    catalog.write_text(
+        "species\tdivision\tassembly\n"
+        "acanthochromis_polyacanthus\tEnsemblVertebrates\tASM210954v1\n"
+        "equus_caballus\tEnsemblVertebrates\tEquCab3.0\n",
+        encoding="utf-8",
+    )
+
+    candidates = gencode._find_ensembl_species_candidates(catalog, "horse")
+
+    assert candidates == []
 
 
 def test_filter_gencode_bed_isoid_omits_unmatched_genes(tmp_path):

@@ -10,6 +10,7 @@ from typing import Iterable, Optional, Tuple, Union
 
 from ._download import ProgressCallback, report_progress
 from ._derive import write_deduplong
+from ._gencode import data_species_name
 from ._external import (
     BLACKLIST_VERSION,
     install_blacklists,
@@ -35,7 +36,7 @@ from ._regions import (
 )
 from ._version import __version__
 
-INSTALL_COMPONENTS = ("gencode-feature", "gencode-bed", "blacklists", "cgi")
+INSTALL_COMPONENTS = ("anno-feature", "anno-bed", "blacklists", "cgi")
 GENCODE_FEATURE_DIR_NAME = "feature"
 DEFAULT_GENCODE_FEATURE_SPECS = (
     ("hg38", "v31"),
@@ -50,12 +51,17 @@ def install_data(
     overwrite: bool = True,
     components: Optional[Union[str, Iterable[str]]] = None,
     progress: Optional[ProgressCallback] = None,
+    cache_dir: Optional[object] = None,
+    ucsc_annotation: str = "ens",
+    clean_cache: bool = False,
 ) -> Path:
     """Install selected resources into the user data directory.
 
-    By default this installs ``gencode-feature``, ``gencode-bed``,
-    ``blacklists``, and ``cgi``. ``gencode-feature`` installs the bundled gene
+    By default this installs ``anno-feature``, ``anno-bed``,
+    ``blacklists``, and ``cgi``. ``anno-feature`` installs the bundled gene
     BED files plus deduplicated longest-isoform gene BEDs.
+    ``cache_dir`` controls downloaded GTF placement; ``ucsc_annotation`` and
+    ``clean_cache`` are forwarded to GENCODE feature generation.
     """
 
     selected = _normalize_install_components(components)
@@ -63,12 +69,19 @@ def install_data(
     target_root.mkdir(parents=True, exist_ok=True)
     report_progress(progress, "install: started")
 
-    if "gencode-bed" in selected:
-        report_progress(progress, "install: installing gencode-bed")
+    if "anno-bed" in selected:
+        report_progress(progress, "install: installing anno-bed")
         install_gencode_beds(target_root, overwrite=overwrite)
-        report_progress(progress, "install: gencode-bed done")
-    if "gencode-feature" in selected:
-        install_gencode_features(target_root, overwrite=overwrite, progress=progress)
+        report_progress(progress, "install: anno-bed done")
+    if "anno-feature" in selected:
+        install_gencode_features(
+            target_root,
+            overwrite=overwrite,
+            progress=progress,
+            cache_dir=target_root if cache_dir is None else cache_dir,
+            ucsc_annotation=ucsc_annotation,
+            clean_cache=clean_cache,
+        )
 
     if "blacklists" in selected:
         report_progress(progress, "install: installing blacklists")
@@ -129,6 +142,9 @@ def install_gencode_features(
     split_tss: bool = True,
     include_type: bool = True,
     progress: Optional[ProgressCallback] = None,
+    cache_dir: Optional[object] = None,
+    ucsc_annotation: str = "ens",
+    clean_cache: bool = False,
 ) -> Path:
     """Install bundled derived annotations and downloaded GENCODE features.
 
@@ -139,15 +155,15 @@ def install_gencode_features(
     pointing to the selected version/prefix directory.
     """
 
-    report_progress(progress, "install-gencode-feature: started")
-    report_progress(progress, "install-gencode-feature: installing GENCODE BEDs")
+    report_progress(progress, "install-feature: started")
+    report_progress(progress, "install-feature: installing GENCODE BEDs")
     target_root = install_gencode_beds(data_dir, overwrite=overwrite)
-    report_progress(progress, "install-gencode-feature: GENCODE BEDs done")
+    report_progress(progress, "install-feature: GENCODE BEDs done")
 
     for feature_species, feature_version in _feature_install_specs(species, version):
         report_progress(
             progress,
-            "install-gencode-feature: installing feature set {} {}".format(
+            "install-feature: installing feature set {} {}".format(
                 feature_species, feature_version
             ),
         )
@@ -167,6 +183,9 @@ def install_gencode_features(
             split_tss=split_tss,
             include_type=include_type,
             progress=progress,
+            cache_dir=cache_dir,
+            ucsc_annotation=ucsc_annotation,
+            clean_cache=clean_cache,
             skip_existing=_can_skip_existing_feature_install(
                 source_dir=output_dir,
                 gtf_path=gtf_path,
@@ -176,12 +195,12 @@ def install_gencode_features(
         )
         report_progress(
             progress,
-            "install-gencode-feature: feature set {} {} done".format(
+            "install-feature: feature set {} {} done".format(
                 feature_species, feature_version
             ),
         )
 
-    report_progress(progress, "install-gencode-feature: done")
+    report_progress(progress, "install-feature: done")
     return target_root
 
 
@@ -202,12 +221,16 @@ def install_gencode_feature_set(
     include_type: bool = True,
     progress: Optional[ProgressCallback] = None,
     skip_existing: bool = False,
+    cache_dir: Optional[object] = None,
+    ucsc_annotation: str = "ens",
+    clean_cache: bool = False,
 ) -> Path:
     """Install one downloaded GENCODE feature set into the cache."""
 
     target_root = user_data_dir(data_dir)
+    storage_species = data_species_name(species, version, cache_dir=cache_dir)
     label = gencode_feature_prefix(promoter_bp=promoter_bp, prefix=prefix)
-    species_dir = target_root / GENCODE_FEATURE_DIR_NAME / species
+    species_dir = target_root / GENCODE_FEATURE_DIR_NAME / storage_species
     version_dir = species_dir / version
     feature_dir = version_dir / label
     feature_dir.mkdir(parents=True, exist_ok=True)
@@ -218,7 +241,7 @@ def install_gencode_feature_set(
         )
         report_progress(
             progress,
-            "install-gencode-feature: using existing feature set {}".format(
+            "install-feature: using existing feature set {}".format(
                 feature_dir
             ),
         )
@@ -227,21 +250,21 @@ def install_gencode_feature_set(
     selected_gene_bed = (
         Path(gene_bed).expanduser()
         if gene_bed is not None
-        else _existing_installed_gene_bed(target_root, species, version)
+        else _existing_installed_gene_bed(target_root, storage_species, version)
     )
     gene_bed_output = (
         None
         if selected_gene_bed is not None
-        else _installed_gene_bed_path(target_root, species, version)
+        else _installed_gene_bed_path(target_root, storage_species, version)
     )
 
     if source_dir is not None:
         source_feature_dir = _find_preprocessed_feature_dir(
-            Path(source_dir).expanduser(), species, version, label
+            Path(source_dir).expanduser(), storage_species, version, label
         )
         if source_feature_dir is None:
             source_feature_dir = (
-                Path(source_dir).expanduser() / species / version / label
+                Path(source_dir).expanduser() / storage_species / version / label
             )
             source_feature_dir.mkdir(parents=True, exist_ok=True)
             download_gencode_feature(
@@ -260,6 +283,10 @@ def install_gencode_feature_set(
                 overwrite=overwrite,
                 log_data_dir=target_root,
                 progress=progress,
+                cache_dir=cache_dir,
+                ucsc_annotation=ucsc_annotation,
+                clean_cache=clean_cache,
+                data_species=storage_species,
                 gene_bed_output=gene_bed_output,
             )
         _copy_preprocessed_feature_dir(
@@ -285,14 +312,23 @@ def install_gencode_feature_set(
             overwrite=overwrite,
             log_data_dir=target_root,
             progress=progress,
+            cache_dir=cache_dir,
+            ucsc_annotation=ucsc_annotation,
+            clean_cache=clean_cache,
+            data_species=storage_species,
             gene_bed_output=gene_bed_output,
         )
+    if selected_gene_bed is None:
+        selected_gene_bed = _installed_gene_bed_path(target_root, storage_species, version)
+    deduplong_gene_bed = selected_gene_bed.parent / "deduplong.gene.bed"
+    if selected_gene_bed.exists() and (overwrite or not deduplong_gene_bed.exists()):
+        write_deduplong(selected_gene_bed, deduplong_gene_bed)
     _refresh_default_feature_dir(
         species_dir, version, label, feature_dir, overwrite=overwrite
     )
     report_progress(
         progress,
-        "install-gencode-feature: refreshed default feature link {}".format(
+        "install-feature: refreshed default feature link {}".format(
             species_dir / "def"
         ),
     )
@@ -331,7 +367,7 @@ def _feature_install_specs(
 ) -> Tuple[Tuple[str, str], ...]:
     if species is None or (isinstance(species, str) and species.lower() == "all"):
         if version is not None and str(version).lower() != "all":
-            raise ValueError("version requires a species for install-gencode-feature.")
+            raise ValueError("version requires a species for install-feature.")
         return DEFAULT_GENCODE_FEATURE_SPECS
 
     if isinstance(species, str):

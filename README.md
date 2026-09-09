@@ -13,7 +13,7 @@ pip install sjcab_peak2anno_db
 
 export SJCAB_PEAK2ANNO_DB_PATH=/path/to/sjcab_peak2anno_db
 sjcab-peak2anno-db install
-sjcab-peak2anno-db install gencode-bed gencode-feature
+sjcab-peak2anno-db install anno-bed anno-feature
 sjcab-peak2anno-db install --overwrite
 sjcab-peak2anno-db list
 ```
@@ -61,7 +61,7 @@ sjcab-peak2anno-db download-bed human def
 layout.
 
 `download-bed` downloads or reuses the expected GTF. It first checks the
-`cachegtf` cache, then the output directory and current working directory,
+`cache` cache, then the output directory and current working directory,
 before downloading. Use `--gtf-path`/`-g` to force a specific local GTF or
 `--url`/`-u` to use a custom URL. Species not covered by the bundled GENCODE
 registry automatically try a matching UCSC short genome ID, then Ensembl
@@ -70,7 +70,7 @@ Vertebrates, then Ensembl Genomes. Its version is the Ensembl release number
 automatic source selection is used by `download-feature`.
 
 `-o/--output-dir` defaults to the current working directory; it is not required.
-Downloaded GTFs are stored in `{data_dir}/cachegtf/`, where `{data_dir}` is
+Downloaded GTFs are stored in `{data_dir}/cache/`, where `{data_dir}` is
 `--data-dir`, `SJCAB_PEAK2ANNO_DB_PATH`, or `~/.sjcab_peak2anno_db`. Use
 `--clean-cache` to remove the GTF after its BED files have been generated.
 Known Ensembl chromosome sizes are bundled with the package. UCSC sizes are
@@ -90,9 +90,12 @@ current release metadata. The separate links are
 current release from `https://ftp.ebi.ac.uk/pub/ensemblgenomes/VERSION`.
 
 For a species not built into the resolver, the command checks separate cached
-catalogs at `{data_dir}/ensembl/vertebrates/species_EnsemblVertebrates.txt` and
-`{data_dir}/ensembl/genomes/species.txt`, downloading the missing catalog only when
-needed. Each catalog stores only `species`, `division`, and `assembly`. A
+catalogs under `{data_dir}/ensembl/vertebrates/{release}/` and
+`{data_dir}/ensembl/genomes/{release}/`, downloading the missing catalog only when
+needed. The `def` directory links to the current release. Each catalog stores
+`assembly`, `species`, `division`, `name`, and
+`assembly_accession` in that order; column 1 can be passed back as the species
+ID. A
 release-specific reduced catalog is stored at
 `{data_dir}/ensembl/vertebrates/{release}/` or
 `{data_dir}/ensembl/genomes/{release}/`; each catalog's `def` link points to
@@ -510,8 +513,8 @@ db.download_cgi(species="hg38")
 ```bash
 sjcab-peak2anno-db list
 sjcab-peak2anno-db install
-sjcab-peak2anno-db install gencode-bed gencode-feature blacklists cgi
-sjcab-peak2anno-db install -c gencode-bed -c gencode-feature
+sjcab-peak2anno-db install anno-bed anno-feature blacklists cgi
+sjcab-peak2anno-db install -c anno-bed -c anno-feature
 sjcab-peak2anno-db install --overwrite
 
 sjcab-peak2anno-db install-bed
