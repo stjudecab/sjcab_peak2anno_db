@@ -16,6 +16,11 @@ from typing import Dict, Iterable, Mapping, Optional, Tuple, Union
 from urllib.error import HTTPError
 
 from ._derive import write_deduplong
+from ._config import (
+    clean_cache_files,
+    configured_sizes_clean,
+    configured_stale_seconds,
+)
 from ._download import ProgressCallback, download_file, report_progress
 from ._download_log import record_download_url
 from ._registry import data_root, user_data_dir
@@ -246,6 +251,8 @@ def ensembl_assembly_accession(
     """Return a cached Ensembl assembly accession when one is available."""
 
     root = user_data_dir(cache_dir) / "ensembl"
+    species_key = species.lower().replace(" ", "_")
+    search_species = _ENSEMBL_SPECIES.get(species_key, (species,))[0]
     for _catalog_name, _genomes, _url, filename, cache_subdir in _ENSEMBL_CATALOGS:
         path = root / cache_subdir / "def" / filename
         legacy_path = root / cache_subdir / filename
@@ -260,7 +267,7 @@ def ensembl_assembly_accession(
             continue
         rows = _read_ensembl_species_catalog(path)
         rows.sort(key=lambda fields: _ensembl_division_rank(fields[2]))
-        wanted = _normalize_species_match(species)
+        wanted = _normalize_species_match(search_species)
         for fields in rows:
             if any(
                 _normalize_species_match(fields[index]) == wanted
@@ -319,7 +326,10 @@ def _match_ucsc_build(species: str, builds) -> Optional[str]:
     )
 
 
-def _ucsc_gtf_builds(cache_dir: Optional[PathLike] = None):
+def _ucsc_gtf_builds(
+    cache_dir: Optional[PathLike] = None,
+    sizes_clean: Optional[bool] = None,
+):
     """Return UCSC build IDs, refreshing the runtime cache after six months."""
 
     cache_path = user_data_dir(cache_dir) / "ucsc" / "gtf_builds.tsv"
@@ -370,7 +380,7 @@ def _ucsc_gtf_builds(cache_dir: Optional[PathLike] = None):
         for build in sorted(builds):
             handle.write(build + "\n")
     tmp_path.replace(cache_path)
-    _cache_new_ucsc_sizes(builds - old_builds, cache_dir)
+    _cache_new_ucsc_sizes(builds - old_builds, cache_dir, sizes_clean=sizes_clean)
     return builds
 
 
@@ -383,17 +393,24 @@ def _read_ucsc_builds(path: Path):
         }
 
 
-def _cache_new_ucsc_sizes(builds, cache_dir: Optional[PathLike]) -> None:
+def _cache_new_ucsc_sizes(
+    builds, cache_dir: Optional[PathLike], sizes_clean: Optional[bool] = None
+) -> None:
     sizes_dir = user_data_dir(cache_dir) / "sizes"
     sizes_dir.mkdir(parents=True, exist_ok=True)
     for build in sorted(builds):
         raw_path = sizes_dir / "{}.sizes".format(build)
         clean_path = sizes_dir / "{}.sizes.clean".format(build)
-        if raw_path.exists() and clean_path.exists():
+        effective_sizes_clean = (
+            configured_sizes_clean() if sizes_clean is None else sizes_clean
+        )
+        if raw_path.exists() and (not effective_sizes_clean or clean_path.exists()):
             continue
         url = "https://hgdownload.soe.ucsc.edu/goldenPath/{0}/bigZips/{0}.chrom.sizes".format(
             build
         )
+        if not effective_sizes_clean:
+            continue
         try:
             request = urllib.request.Request(
                 url, headers={"User-Agent": "sjcab_peak2anno_db"}
@@ -543,7 +560,8 @@ def _resolve_cached_ensembl_species(
 ):
     """Resolve an unlisted species from separate Vertebrates/Genomes catalogs."""
 
-    wanted = species.lower().replace(" ", "_")
+    species_key = species.lower().replace(" ", "_")
+    wanted = _ENSEMBL_SPECIES.get(species_key, (species_key,))[0]
     root = user_data_dir(cache_dir) / "ensembl"
     requested_release = release
     for catalog_name, genomes, current_url, filename, cache_subdir in _ENSEMBL_CATALOGS:
@@ -688,7 +706,7 @@ def _read_ensembl_species_catalog(cache_path: Path):
 
 def _ensembl_species_metadata(fields, genomes: bool):
     species, _name, division, assembly = fields[:4]
-    latin_name = _name or species
+    latin_name = species or _name
     return latin_name, division.replace("Ensembl", "").lower(), genomes, (
         (assembly, 0, 10**9),
     )
@@ -803,19 +821,13 @@ def _latest_ensembl_release(
 
 
 def _is_stale(path: Path) -> bool:
-    return time.time() - path.stat().st_mtime > _ENSEMBL_CACHE_MAX_AGE
+    return time.time() - path.stat().st_mtime > configured_stale_seconds()
 
 
-def gencode_bed_filename(
-    species: str, version: str, include_type: bool = True
-) -> str:
+def gencode_bed_filename(species: str, version: str) -> str:
     """Return the conventional GENCODE BED file name for a build/version."""
 
-    if include_type:
-        suffix = "gene.bed.withtype"
-    else:
-        suffix = "gtf.bed"
-    return "gencode.{}.{}.{}".format(version, species, suffix)
+    return "gencode.{}.{}.gene.bed.withtype".format(version, species)
 
 
 def gencode_bed_dir(output_dir: PathLike, species: str, version: str) -> Path:
@@ -852,6 +864,88 @@ def resolve_gencode_gtf_url(
     if source_key == "ucsc":
         return ucsc_gtf_url(species, ucsc_annotation, cache_dir=cache_dir)
     return gencode_gtf_url(species, version)
+
+
+def gtf_url_is_available(url: str) -> bool:
+    """Return whether a downloadable GTF URL responds without HTTP 404."""
+
+    request = urllib.request.Request(url, headers={"User-Agent": "sjcab-peak2anno-db"})
+    try:
+        response = urllib.request.urlopen(request, timeout=120)
+        response.close()
+        return True
+    except HTTPError as error:
+        if error.code == 404:
+            return False
+        raise
+
+
+def ensembl_gtf_url_candidates(
+    species: str, version: str, cache_dir: Optional[PathLike] = None
+):
+    """Return exact catalog matches and their candidate GTF URLs."""
+
+    release_text = str(version).lower().replace("release-", "", 1)
+    wanted = _ENSEMBL_SPECIES.get(
+        species.lower().replace(" ", "_"), (species,)
+    )[0]
+    candidates = []
+    seen = set()
+    for _catalog_name, genomes, _current_url, filename, cache_subdir in _ENSEMBL_CATALOGS:
+        release = (
+            _latest_ensembl_release(genomes, cache_dir=cache_dir)
+            if release_text in {"def", "default", "current", "latest"}
+            else int(release_text)
+        )
+        catalog_root = user_data_dir(cache_dir) / "ensembl" / cache_subdir
+        catalog_path = catalog_root / str(release) / filename
+        if not catalog_path.exists() or _is_stale(catalog_path):
+            catalog_path = _download_ensembl_species_catalog(
+                _ensembl_release_catalog_url(release, genomes),
+                catalog_path.parent,
+                filename,
+                cache_dir=cache_dir,
+            )
+        rows = _read_ensembl_species_catalog(catalog_path)
+        rows.sort(key=lambda fields: _ensembl_division_rank(fields[2]))
+        for field_index in (3, 0, 1):
+            matches = [
+                fields
+                for fields in rows
+                if _normalize_species_match(fields[field_index])
+                == _normalize_species_match(wanted)
+            ]
+            if not matches:
+                continue
+            for fields in matches:
+                key = (fields[0], fields[1], fields[2], fields[3], fields[4])
+                if key in seen:
+                    continue
+                seen.add(key)
+                metadata = _ensembl_species_metadata(fields, genomes)
+                latin_name, division, is_genomes, references = metadata
+                reference = next(
+                    (
+                        name
+                        for name, first, last in references
+                        if first <= release <= last
+                    ),
+                    fields[3],
+                )
+                filename_url = "{}.{}.{}.gtf.gz".format(
+                    latin_name.capitalize(), reference, release
+                )
+                if is_genomes:
+                    url = "https://ftp.ebi.ac.uk/pub/ensemblgenomes/release-{}/{}/gtf/{}/{}".format(
+                        release, division, latin_name, filename_url
+                    )
+                else:
+                    url = "https://ftp.ensembl.org/pub/release-{}/gtf/{}/{}".format(
+                        release, latin_name, filename_url
+                    )
+                candidates.append((fields, url))
+            break
+    return candidates
 
 
 def download_gencode_gtf(
@@ -892,7 +986,7 @@ def download_gencode_gtf(
     if existing_gtf is not None:
         report_progress(
             progress,
-            "download-gencode-gtf: using existing {}".format(existing_gtf),
+            "download-gtf: using existing {}".format(existing_gtf),
         )
         return existing_gtf
 
@@ -909,7 +1003,7 @@ def download_gencode_gtf(
             raise
         report_progress(
             progress,
-            "download-gencode-gtf: Ensembl URL returned 404; retrying via species catalog",
+            "download-gtf: Ensembl URL returned 404; retrying via species catalog",
         )
         url = ensembl_gtf_url(
             species,
@@ -955,7 +1049,6 @@ def _same_path(left: Path, right: Path) -> bool:
 def convert_gencode_gtf_to_bed(
     gtf_path: PathLike,
     output_bed: PathLike,
-    include_type: bool = True,
     gene_types: Optional[Iterable[str]] = None,
 ) -> Path:
     """Convert a GENCODE GTF to a transcript-level gene BED file.
@@ -966,8 +1059,7 @@ def convert_gencode_gtf_to_bed(
     ``chrom, start, end, gene_name, transcript_exon_length, strand,``
     ``gene_id.version, transcript_id.version, gene_type``.
 
-    Set ``include_type=False`` to write the package's compact 8-column BED
-    form. ``gene_types`` can be used to keep only selected GENCODE gene types.
+    ``gene_types`` can be used to keep only selected GENCODE gene types.
     """
 
     output = Path(output_bed).expanduser()
@@ -996,8 +1088,7 @@ def convert_gencode_gtf_to_bed(
                     record.gene_id,
                     record.transcript_id,
                 ]
-                if include_type:
-                    fields.append(record.gene_type)
+                fields.append(record.gene_type)
                 handle.write("{}\n".format("\t".join(fields)))
         tmp_path.replace(output)
     finally:
@@ -1014,7 +1105,6 @@ def download_and_convert_gencode_gtf(
     gtf_path: Optional[PathLike] = None,
     gtf_url: Optional[str] = None,
     output_bed: Optional[PathLike] = None,
-    include_type: bool = True,
     gene_types: Optional[Iterable[str]] = None,
     overwrite: bool = True,
     log_data_dir: Optional[PathLike] = None,
@@ -1022,7 +1112,7 @@ def download_and_convert_gencode_gtf(
     source: str = "auto",
     cache_dir: Optional[PathLike] = None,
     ucsc_annotation: str = "ens",
-    clean_cache: bool = False,
+    clean_cache: Optional[Union[bool, int]] = None,
 ) -> Path:
     """Download or reuse a GENCODE GTF and convert it to BED.
 
@@ -1067,7 +1157,6 @@ def download_and_convert_gencode_gtf(
         convert_gencode_gtf_to_bed(
             gtf_path,
             output_bed,
-            include_type=include_type,
             gene_types=gene_types,
         )
 
@@ -1075,11 +1164,13 @@ def download_and_convert_gencode_gtf(
         _write_gencode_bed_layout(output_bed, version_dir, overwrite=overwrite)
         _refresh_default_version_dir(target_dir, species, version, version_dir)
 
-    if clean_cache and gtf_path is not None:
-        cached_path = Path(gtf_path)
-        cache_root = user_data_dir(cache_dir) / "cache"
-        if cached_path.parent == cache_root and cached_path.exists():
-            cached_path.unlink()
+    cached_path = Path(gtf_path) if gtf_path is not None else None
+    cache_root = user_data_dir(cache_dir) / "cache"
+    clean_cache_files(
+        cache_root,
+        clean_cache,
+        current_path=cached_path if cached_path and cached_path.parent == cache_root else None,
+    )
 
     return output_bed
 
@@ -1087,7 +1178,6 @@ def download_and_convert_gencode_gtf(
 def regenerate_gencode_beds(
     output_dir: PathLike,
     specs: Iterable[Tuple[str, str, PathLike]],
-    include_type: bool = True,
     overwrite: bool = True,
 ) -> Tuple[Path, ...]:
     """Regenerate several GENCODE BED files from local GTF paths.
@@ -1105,7 +1195,6 @@ def regenerate_gencode_beds(
                 version,
                 output_dir,
                 gtf_path=gtf_path,
-                include_type=include_type,
                 overwrite=overwrite,
             )
         )

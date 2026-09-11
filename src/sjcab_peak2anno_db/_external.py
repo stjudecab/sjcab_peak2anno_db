@@ -58,6 +58,7 @@ def iter_blacklists() -> Tuple[str, ...]:
 def install_blacklists(
     data_dir: Optional[object] = None,
     overwrite: bool = True,
+    species: Optional[Iterable[str]] = None,
 ) -> Path:
     """Install bundled blacklists into the cache with dated real files.
 
@@ -69,7 +70,10 @@ def install_blacklists(
     target_dir = blacklist_dir(data_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
 
+    selected = None if species is None else {str(value).lower() for value in species}
     for source in _blacklist_sources():
+        if selected is not None and not _blacklist_matches_species(source, selected):
+            continue
         versioned_path = target_dir / "{}.{}".format(source.name, BLACKLIST_VERSION)
         current_path = target_dir / source.name
 
@@ -86,15 +90,24 @@ def install_blacklists(
 def install_cgi(
     data_dir: Optional[object] = None,
     overwrite: bool = True,
+    species: Optional[Iterable[str]] = None,
 ) -> Path:
     """Install packaged CGI BED files into the cache."""
 
     target_dir = cgi_dir(data_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    for species in CGI_SPECIES:
-        source = data_root() / CGI_DIR_NAME / "{}_cgi.bed".format(species)
-        destination = target_dir / "{}_cgi.bed".format(species)
+    selected_species = CGI_SPECIES if species is None else tuple(species)
+    unknown = sorted(set(selected_species) - set(CGI_SPECIES))
+    if unknown:
+        raise UnknownResourceError(
+            "Unsupported packaged CGI species {}. Supported species: {}".format(
+                ", ".join(unknown), ", ".join(CGI_SPECIES)
+            )
+        )
+    for genome in selected_species:
+        source = data_root() / CGI_DIR_NAME / "{}_cgi.bed".format(genome)
+        destination = target_dir / "{}_cgi.bed".format(genome)
         if destination.exists() and not overwrite:
             continue
         shutil.copyfile(source, destination)
@@ -141,6 +154,14 @@ def _blacklist_sources() -> Tuple[Path, ...]:
     if not source_dir.exists():
         return tuple()
     return tuple(sorted(source_dir.glob("*blacklist*.bed"), key=lambda path: path.name))
+
+
+def _blacklist_matches_species(source: Path, selected: set) -> bool:
+    name = source.name.lower()
+    return any(
+        name == "{}-blacklist.bed".format(genome)
+        for genome in selected
+    )
 
 
 def _normalize_cgi_species(

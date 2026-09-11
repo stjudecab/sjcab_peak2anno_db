@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO, Iterator, Mapping, Optional, TextIO, Tuple, Union
 
+from ._config import configured_db_path
+
 SUPPORTED_SPECIES = ("hg19", "hg38", "mm10", "mm9", "mm39", "sacCer3")
 ANNOTATION_TYPES = ("gene",)
 ISOFORM_SETS = ("all", "deduplong")
@@ -119,7 +121,7 @@ def user_data_dir(data_dir: Optional[PathLike] = None) -> Path:
     if data_dir is not None:
         return Path(data_dir).expanduser()
 
-    env_path = os.environ.get(DATA_PATH_ENV_VAR)
+    env_path = os.environ.get(DATA_PATH_ENV_VAR) or configured_db_path()
     if env_path:
         return Path(env_path).expanduser()
     return DEFAULT_DATA_DIR

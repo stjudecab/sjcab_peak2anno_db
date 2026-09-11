@@ -9,7 +9,7 @@ The main sources are:
 Commands to merge blacklists that we had prior April 2023:
 
 ```
-for genome in ce10 ce11 dm3 dm6 hg18 hg19 hg38 hg38_rDNA hg38_rDNA_only mm10 mm39 mm9 sacCer3 
+for genome in ce10 ce11 dm3 dm6 hg18 hg19 hg38 mm10 mm39 mm9 sacCer3
 do
     for bkFile in $(tree -i -f ../../.. | grep "$genome-blacklist")
     do
@@ -32,8 +32,6 @@ Stats are:
   1411 hg18-blacklist.bed
   1871 hg19-blacklist.bed
   2375 hg38-blacklist.bed
-  1383 hg38_rDNA-blacklist.bed
-  1383 hg38_rDNA_only-blacklist.bed
   4874 mm10-blacklist.bed
   3004 mm39-blacklist.bed
   3038 mm9-blacklist.bed
@@ -41,5 +39,4 @@ Stats are:
 ```
 
 Note, that if the collection of blacklists would be updated in the future, the files here should be the first ones to be updated.
-
 

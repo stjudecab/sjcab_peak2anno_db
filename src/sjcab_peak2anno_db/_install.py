@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Iterable, Optional, Tuple, Union
 
 from ._download import ProgressCallback, report_progress
+from ._config import load_config
 from ._derive import write_deduplong
 from ._gencode import data_species_name
 from ._external import (
@@ -53,7 +54,8 @@ def install_data(
     progress: Optional[ProgressCallback] = None,
     cache_dir: Optional[object] = None,
     ucsc_annotation: str = "ens",
-    clean_cache: bool = False,
+    clean_cache: Optional[Union[bool, int]] = None,
+    sizes_clean: Optional[bool] = None,
 ) -> Path:
     """Install selected resources into the user data directory.
 
@@ -64,7 +66,12 @@ def install_data(
     ``clean_cache`` are forwarded to GENCODE feature generation.
     """
 
-    selected = _normalize_install_components(components)
+    config = load_config()
+    selected = _normalize_install_components(
+        components
+        if components is not None
+        else (config.install_components if config.components_configured else None)
+    )
     target_root = user_data_dir(data_dir)
     target_root.mkdir(parents=True, exist_ok=True)
     report_progress(progress, "install: started")
@@ -74,14 +81,24 @@ def install_data(
         install_gencode_beds(target_root, overwrite=overwrite)
         report_progress(progress, "install: anno-bed done")
     if "anno-feature" in selected:
-        install_gencode_features(
-            target_root,
+        feature_kwargs = dict(
             overwrite=overwrite,
             progress=progress,
             cache_dir=target_root if cache_dir is None else cache_dir,
             ucsc_annotation=ucsc_annotation,
             clean_cache=clean_cache,
+            sizes_clean=sizes_clean,
         )
+        if config.feature_specs_configured:
+            for feature_species, feature_version in config.feature_specs:
+                install_gencode_features(
+                    target_root,
+                    species=feature_species,
+                    version=feature_version,
+                    **feature_kwargs
+                )
+        else:
+            install_gencode_features(target_root, **feature_kwargs)
 
     if "blacklists" in selected:
         report_progress(progress, "install: installing blacklists")
@@ -140,12 +157,13 @@ def install_gencode_features(
     distal_bp: Union[int, str] = 50000,
     tes_bp: Union[int, str] = 2000,
     split_tss: bool = True,
-    include_type: bool = True,
     progress: Optional[ProgressCallback] = None,
     cache_dir: Optional[object] = None,
     ucsc_annotation: str = "ens",
-    clean_cache: bool = False,
+    clean_cache: Optional[Union[bool, int]] = None,
+    sizes_clean: Optional[bool] = None,
     custom_name: Optional[str] = None,
+    collector_backend: str = "python",
 ) -> Path:
     """Install bundled derived annotations and downloaded GENCODE features.
 
@@ -159,6 +177,7 @@ def install_gencode_features(
     report_progress(progress, "install-feature: started")
     report_progress(progress, "install-feature: installing GENCODE BEDs")
     target_root = install_gencode_beds(data_dir, overwrite=overwrite)
+    effective_cache_dir = target_root if cache_dir is None else cache_dir
     report_progress(progress, "install-feature: GENCODE BEDs done")
 
     for feature_species, feature_version in _feature_install_specs(species, version):
@@ -182,12 +201,13 @@ def install_gencode_features(
             distal_bp=distal_bp,
             tes_bp=tes_bp,
             split_tss=split_tss,
-            include_type=include_type,
             progress=progress,
-            cache_dir=cache_dir,
+            cache_dir=effective_cache_dir,
             ucsc_annotation=ucsc_annotation,
             clean_cache=clean_cache,
+            sizes_clean=sizes_clean,
             custom_name=custom_name,
+            collector_backend=collector_backend,
             skip_existing=_can_skip_existing_feature_install(
                 source_dir=output_dir,
                 gtf_path=gtf_path,
@@ -220,13 +240,14 @@ def install_gencode_feature_set(
     distal_bp: Union[int, str] = 50000,
     tes_bp: Union[int, str] = 2000,
     split_tss: bool = True,
-    include_type: bool = True,
     progress: Optional[ProgressCallback] = None,
     skip_existing: bool = False,
     cache_dir: Optional[object] = None,
     ucsc_annotation: str = "ens",
-    clean_cache: bool = False,
+    clean_cache: Optional[Union[bool, int]] = None,
+    sizes_clean: Optional[bool] = None,
     custom_name: Optional[str] = None,
+    collector_backend: str = "python",
 ) -> Path:
     """Install one downloaded GENCODE feature set into the cache."""
 
@@ -284,7 +305,6 @@ def install_gencode_feature_set(
                 distal_bp=distal_bp,
                 prefix=label,
                 split_tss=split_tss,
-                include_type=include_type,
                 tes_bp=tes_bp,
                 overwrite=overwrite,
                 log_data_dir=target_root,
@@ -292,7 +312,9 @@ def install_gencode_feature_set(
                 cache_dir=cache_dir,
                 ucsc_annotation=ucsc_annotation,
                 clean_cache=clean_cache,
+                sizes_clean=sizes_clean,
                 data_species=storage_species,
+                collector_backend=collector_backend,
                 gene_bed_output=gene_bed_output,
             )
         _copy_preprocessed_feature_dir(
@@ -313,7 +335,6 @@ def install_gencode_feature_set(
             distal_bp=distal_bp,
             prefix=label,
             split_tss=split_tss,
-            include_type=include_type,
             tes_bp=tes_bp,
             overwrite=overwrite,
             log_data_dir=target_root,
@@ -321,7 +342,9 @@ def install_gencode_feature_set(
             cache_dir=cache_dir,
             ucsc_annotation=ucsc_annotation,
             clean_cache=clean_cache,
+            sizes_clean=sizes_clean,
             data_species=storage_species,
+            collector_backend=collector_backend,
             gene_bed_output=gene_bed_output,
         )
     if selected_gene_bed is None:

@@ -9,10 +9,15 @@ import time
 from pathlib import Path
 from typing import Optional, Sequence
 
-from ._chromhmm import download_chromhmm
+from ._chromhmm import CHROMHMM_GENOMES, chromhmm_root, download_chromhmm
 from ._dedup import dedup_gencode_bed, filter_gencode_bed
 from ._external import CGI_SPECIES, download_cgi, install_blacklists, install_cgi
-from ._gencode import download_and_convert_gencode_gtf, resolve_gencode_gtf_url
+from ._gencode import (
+    download_and_convert_gencode_gtf,
+    ensembl_gtf_url_candidates,
+    gtf_url_is_available,
+    resolve_gencode_gtf_url,
+)
 from ._install import (
     DEFAULT_GENCODE_FEATURE_SPECS,
     INSTALL_COMPONENTS,
@@ -36,6 +41,7 @@ from ._segway import (
     segway_root,
     write_segway_liftover_script,
 )
+from ._liftover import write_liftover_script
 
 _ANNOTATION_CHOICES = ANNOTATION_TYPES + ("deduplong",)
 _GENCODE_FEATURE_SPECIES = ("hg38", "hg19", "mm10", "mm9", "mm39")
@@ -48,6 +54,14 @@ _GENCODE_VERSION_HELP = (
     "https://www.gencodegenes.org/mouse/releases.html"
 )
 _GENCODE_HELP_EPILOG = "{}\n{}".format(_GENCODE_SPECIES_HELP, _GENCODE_VERSION_HELP)
+_PACKAGED_BLACKLIST_SPECIES = frozenset(
+    {"ce10", "ce11", "dm3", "dm6", "hg18", "hg19", "hg38", "mm9", "mm10", "mm39", "saccer3"}
+)
+_RESOURCE_SPECIES_HELP = (
+    "Available directly: hg38,hg19,mm39,mm10,mm9. Other UCSC builds will "
+    "provide a liftOver bash script from hg38; check "
+    "https://hgdownload.soe.ucsc.edu/goldenPath/hg38/liftOver/ for available."
+)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -111,8 +125,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     install_parser.add_argument(
         "--clean-cache",
-        action="store_true",
-        help="Delete downloaded GTFs from the cache after conversion.",
+        nargs="?", const=-1, type=int, default=None, metavar="DAYS",
+        help="Clean cache files older than DAYS (default 90); negative means immediately.",
+    )
+    install_parser.add_argument(
+        "--sizes-clean", nargs="?", const=1, type=int, default=None, metavar="0|1",
+        help="Create .sizes.clean files (default); use --sizes-clean 0 to disable.",
     )
     install_overwrite_group = install_parser.add_mutually_exclusive_group()
     install_overwrite_group.add_argument(
@@ -133,13 +151,23 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     update_parser = subparsers.add_parser(
         "update", help="Regenerate all annotations into the configured user data directory."
     )
+    update_parser.add_argument("species", nargs="?", help="Species/build to update.")
     update_parser.add_argument("-d", "--data-dir", help="Generated annotation directory.")
 
     blacklist_parser = subparsers.add_parser(
         "install-blacklists",
         help="Install blacklist BEDs into the configured user data directory.",
     )
+    blacklist_parser.add_argument("species_positional", nargs="?", metavar="SPECIES")
     blacklist_parser.add_argument("-d", "--data-dir", help="Generated annotation directory.")
+    blacklist_parser.add_argument(
+        "-s", "--species", nargs="+",
+        help=_RESOURCE_SPECIES_HELP,
+    )
+    blacklist_parser.add_argument(
+        "--yes-liftover", action="store_true",
+        help="Accept generating a CrossMap script from hg38 for unsupported builds.",
+    )
     blacklist_parser.add_argument(
         "-n",
         "--no-overwrite",
@@ -151,7 +179,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "install-cgi",
         help="Install packaged CGI BED files into the configured user data directory.",
     )
+    install_cgi_parser.add_argument("species_positional", nargs="?", metavar="SPECIES")
     install_cgi_parser.add_argument("-d", "--data-dir", help="Generated annotation directory.")
+    install_cgi_parser.add_argument(
+        "-s", "--species", nargs="+",
+        help=_RESOURCE_SPECIES_HELP,
+    )
+    install_cgi_parser.add_argument(
+        "--yes-liftover", action="store_true",
+        help="Accept generating a CrossMap script from hg38 for unsupported builds.",
+    )
     install_cgi_parser.add_argument(
         "-n",
         "--no-overwrite",
@@ -168,12 +205,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     feature_install_parser.add_argument(
         "species",
         nargs="?",
-        help="Genome build to install, or all for default feature builds.",
+        help="Genome build to install, empty or all for Gencode default feature builds.",
     )
     feature_install_parser.add_argument(
         "version",
         nargs="?",
-        help="GENCODE version to install, or all for default versions.",
+        help="GENCODE/UCSC/Ensemble version to install, def/default/current/empty for default versions.",
     )
     feature_install_parser.add_argument(
         "--all",
@@ -209,9 +246,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
 
     bed_install_parser = subparsers.add_parser(
-        "install-bed",
+        "install-genebed",
         help="Install bundled GENCODE BEDs and derived TSS/TES files.",
     )
+    bed_install_parser.add_argument("species", nargs="?", help="Species/build to install.")
     bed_install_parser.add_argument("-d", "--data-dir", help="Generated annotation directory.")
     bed_overwrite_group = bed_install_parser.add_mutually_exclusive_group()
     bed_overwrite_group.add_argument(
@@ -233,13 +271,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "download-cgi",
         help="Download UCSC cpgIslandExt tables and write CGI BED files.",
     )
+    cgi_parser.add_argument("species_positional", nargs="?", metavar="SPECIES")
     cgi_parser.add_argument("-d", "--data-dir", help="Generated annotation directory.")
     cgi_parser.add_argument(
         "-s",
         "--species",
+        dest="species_option",
         choices=CGI_SPECIES,
         nargs="+",
-        help="Species to download. Defaults to all supported CGI species.",
+        help=_RESOURCE_SPECIES_HELP,
+    )
+    cgi_parser.add_argument(
+        "--yes-liftover", action="store_true",
+        help="For another build, download hg38 and write a CrossMap script.",
     )
     cgi_parser.add_argument(
         "-n",
@@ -249,7 +293,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
 
     gencode_parser = subparsers.add_parser(
-        "download-bed",
+        "download-genebed",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         help="Download or reuse a GENCODE GTF and write organized BED files.",
         epilog=_GENCODE_HELP_EPILOG,
@@ -279,19 +323,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     gencode_parser.add_argument(
         "--clean-cache",
-        action="store_true",
-        help="Delete the downloaded GTF from cache after conversion.",
+        nargs="?", const=-1, type=int, default=None, metavar="DAYS",
+        help="Clean cache files older than DAYS (default 90); negative means immediately.",
     )
     gencode_parser.add_argument(
         "-b",
         "--output-bed",
         help="Explicit single generated gene BED path.",
-    )
-    gencode_parser.add_argument(
-        "-C",
-        "--no-with-type",
-        action="store_true",
-        help="Write the compact 8-column BED instead of *.gene.bed.withtype.",
     )
     gencode_parser.add_argument(
         "-t",
@@ -372,6 +410,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 cache_dir=args.data_dir,
                 ucsc_annotation=args.ucsc_source,
                 clean_cache=args.clean_cache,
+                sizes_clean=args.sizes_clean,
             )
             print(target)
             return 0
@@ -380,18 +419,44 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(target)
             return 0
         if args.command == "install-blacklists":
-            target = install_blacklists(
-                data_dir=args.data_dir,
-                overwrite=not args.no_overwrite,
+            species = tuple(
+                value for value in ((args.species_positional,) if args.species_positional else ())
             )
+            species += tuple(args.species or ())
+            packaged = tuple(value.lower() for value in species if value.lower() in _PACKAGED_BLACKLIST_SPECIES)
+            unsupported = tuple(value for value in species if value.lower() not in _PACKAGED_BLACKLIST_SPECIES)
+            install_species = packaged or (("hg38",) if unsupported else None)
+            blacklist_kwargs = {
+                "data_dir": args.data_dir,
+                "overwrite": not args.no_overwrite,
+            }
+            if install_species is not None:
+                blacklist_kwargs["species"] = install_species
+            target = install_blacklists(**blacklist_kwargs)
             print(target)
+            _write_external_liftover_scripts(
+                target, "blacklists", unsupported, args.yes_liftover
+            )
             return 0
         if args.command == "install-cgi":
-            target = install_cgi(
-                data_dir=args.data_dir,
-                overwrite=not args.no_overwrite,
+            species = tuple(
+                value for value in ((args.species_positional,) if args.species_positional else ())
             )
+            species += tuple(args.species or ())
+            packaged = tuple(value.lower() for value in species if value.lower() in CGI_SPECIES)
+            unsupported = tuple(value.lower() for value in species if value.lower() not in CGI_SPECIES)
+            install_species = packaged or (("hg38",) if unsupported else None)
+            cgi_kwargs = {
+                "data_dir": args.data_dir,
+                "overwrite": not args.no_overwrite,
+            }
+            if install_species is not None:
+                cgi_kwargs["species"] = install_species
+            target = install_cgi(**cgi_kwargs)
             print(target)
+            _write_external_liftover_scripts(
+                target, "cgi", unsupported, args.yes_liftover
+            )
             return 0
         if args.command == "install-feature":
             feature_species, feature_version = _gencode_feature_install_scope(args)
@@ -402,7 +467,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     else _gencode_feature_specs(feature_species, feature_version)
                 )
                 for dry_species, dry_version in dry_specs:
-                    print(resolve_gencode_gtf_url(dry_species, dry_version, cache_dir=args.data_dir))
+                    print(_dry_run_gtf_url(dry_species, dry_version, args.data_dir))
                 return 0
             target = install_gencode_features(
                 data_dir=args.data_dir,
@@ -417,14 +482,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 distal_bp=args.distal_bp,
                 prefix=args.prefix,
                 split_tss=not args.include_tss_base,
-                include_type=not args.compact_bed,
                 tes_bp=args.tes_bp,
                 progress=_stderr_progress,
                 custom_name=args.name,
+                clean_cache=args.clean_cache,
+                sizes_clean=args.sizes_clean,
             )
             print(target)
             return 0
-        if args.command == "install-bed":
+        if args.command == "install-genebed":
             target = install_gencode_beds(
                 data_dir=args.data_dir,
                 overwrite=args.overwrite,
@@ -432,15 +498,35 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(target)
             return 0
         if args.command == "download-cgi":
-            target = download_cgi(
-                data_dir=args.data_dir,
-                species=args.species,
-                overwrite=not args.no_overwrite,
-                progress=_stderr_progress,
+            species = tuple(
+                value for value in ((args.species_positional,) if args.species_positional else ())
             )
+            species += tuple(args.species_option or ())
+            packaged = tuple(value.lower() for value in species if value.lower() in CGI_SPECIES)
+            unsupported = tuple(value.lower() for value in species if value.lower() not in CGI_SPECIES)
+            if unsupported and not args.yes_liftover:
+                raise UnknownResourceError(
+                    "CGI has no packaged files for {}. Re-run with --yes-liftover "
+                    "to download hg38 and write CrossMap scripts.".format(
+                        ", ".join(unsupported)
+                    )
+                )
+            cgi_kwargs = {
+                "data_dir": args.data_dir,
+                "overwrite": not args.no_overwrite,
+                "progress": _stderr_progress,
+            }
+            if species:
+                cgi_kwargs["species"] = tuple(
+                    dict.fromkeys(packaged + (("hg38",) if unsupported else ()))
+                )
+            target = download_cgi(**cgi_kwargs)
             print(target)
+            _write_external_liftover_scripts(
+                target, "cgi", unsupported, args.yes_liftover
+            )
             return 0
-        if args.command == "download-bed":
+        if args.command == "download-genebed":
             target = download_and_convert_gencode_gtf(
                 args.species,
                 args.version,
@@ -448,10 +534,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 gtf_path=args.gtf_path,
                 gtf_url=args.url,
                 output_bed=args.output_bed,
-                include_type=not args.no_with_type,
                 gene_types=args.gene_type,
                 overwrite=not args.no_overwrite,
                 progress=_stderr_progress,
+                clean_cache=args.clean_cache,
             )
             print(target)
             return 0
@@ -459,7 +545,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             specs = _gencode_feature_specs(args.species, args.version)
             if args.dry_run:
                 for dry_species, dry_version in specs:
-                    print(resolve_gencode_gtf_url(dry_species, dry_version, cache_dir=args.data_dir))
+                    print(_dry_run_gtf_url(dry_species, dry_version, args.data_dir))
                 return 0
             multi_spec = len(specs) > 1
             for feature_species, feature_version in specs:
@@ -482,13 +568,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     distal_bp=args.distal_bp,
                     prefix=args.prefix,
                     split_tss=not args.include_tss_base,
-                    include_type=not args.compact_bed,
                     tes_bp=args.tes_bp,
                     overwrite=not args.no_overwrite,
                     progress=_stderr_progress,
                     cache_dir=args.data_dir,
                     ucsc_annotation=args.ucsc_source,
                     clean_cache=args.clean_cache,
+                    sizes_clean=args.sizes_clean,
                 )
                 for name in sorted(targets):
                     if multi_spec:
@@ -529,10 +615,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             chromhmm_data_dir = (
                 args.output_dir if args.command == "download-chromhmm" else args.data_dir
             )
+            requested_genome = str(
+                args.species_positional or args.genome
+            ).lower()
+            source_genome = requested_genome if requested_genome in CHROMHMM_GENOMES else "hg38"
+            if source_genome != requested_genome and not args.yes_liftover:
+                raise UnknownResourceError(
+                    "ChromHMM has hg19/hg38 files. Re-run with --yes-liftover "
+                    "to generate a CrossMap script for {}.".format(requested_genome)
+                )
             targets = download_chromhmm(
                 data_dir=chromhmm_data_dir,
                 model=args.model,
-                genome=args.genome,
+                genome=source_genome,
                 ids=args.ids,
                 tissue=args.tissue,
                 cellline=args.cellline,
@@ -541,12 +636,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             )
             for eid in sorted(targets):
                 print("{}\t{}".format(eid, targets[eid]))
+            if source_genome != requested_genome:
+                root = chromhmm_root(chromhmm_data_dir)
+                source_dir = root / source_genome / "{}state".format(args.model)
+                output_dir = root / ".liftover" / requested_genome / "{}state".format(args.model)
+                script = write_liftover_script(
+                    source_dir, output_dir, source_genome, requested_genome,
+                    root / "liftover_{}_to_{}.sh".format(source_genome, requested_genome),
+                    install_root=root / requested_genome if args.command == "install-chromhmm" else None,
+                )
+                print("liftover_script\t{}".format(script))
             return 0
         if args.command in {"download-segway", "install-segway"}:
             segway_data_dir = (
                 args.output_dir if args.command == "download-segway" else args.data_dir
             )
-            requested_genome = args.genome
+            requested_genome = args.species_positional or args.genome
             download_genome = requested_genome
             liftover_script = None
             if requested_genome.lower() != "hg19":
@@ -617,7 +722,7 @@ def _add_gencode_feature_parser(
     parser.add_argument("species", help="Genome build, for example hg38 or hg19.")
     parser.add_argument(
         "version",
-        help="GENCODE version, for example v31, v31lift37, or vM23.",
+        help="GENCODE/UCSC/Ensemble version, for example v31, v31lift37, or vM23.",
     )
     parser.add_argument(
         "-o",
@@ -635,6 +740,7 @@ def _add_dedup_filter_parser(
     help_text: str,
 ) -> None:
     parser = subparsers.add_parser(name, help=help_text)
+    parser.add_argument("species_positional", nargs="?", metavar="SPECIES")
     parser.add_argument(
         "species",
         nargs="?",
@@ -644,7 +750,7 @@ def _add_dedup_filter_parser(
         "version",
         nargs="?",
         default="default",
-        help="GENCODE version to resolve. Defaults to the species default.",
+        help="GENCODE/UCSC/Ensemble version to resolve. Defaults to the species default.",
     )
     parser.add_argument(
         "-b",
@@ -727,8 +833,12 @@ def _add_feature_generation_arguments(
     )
     parser.add_argument(
         "--clean-cache",
-        action="store_true",
-        help="Delete the downloaded GTF from cache after conversion.",
+        nargs="?", const=-1, type=int, default=None, metavar="DAYS",
+        help="Clean cache files older than DAYS (default 90); negative means immediately.",
+    )
+    parser.add_argument(
+        "--sizes-clean", nargs="?", const=1, type=int, default=None, metavar="0|1",
+        help="Create .sizes.clean files (default); use --sizes-clean 0 to disable.",
     )
     parser.add_argument(
         "-b",
@@ -766,12 +876,6 @@ def _add_feature_generation_arguments(
         "--include-tss-base",
         action="store_true",
         help="Start right-side regions at the TSS instead of after the TSS base.",
-    )
-    parser.add_argument(
-        "-c",
-        "--compact-bed",
-        action="store_true",
-        help="When converting GTF, write the compact 8-column gene BED.",
     )
     if include_name:
         parser.add_argument(
@@ -815,7 +919,13 @@ def _add_chromhmm_parser(
     name: str,
     help_text: str,
 ) -> None:
-    parser = subparsers.add_parser(name, help=help_text)
+    parser = subparsers.add_parser(
+        name,
+        help=help_text,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=_RESOURCE_SPECIES_HELP,
+    )
+    parser.add_argument("species_positional", nargs="?", metavar="SPECIES")
     if name == "download-chromhmm":
         parser.add_argument(
             "-o",
@@ -835,11 +945,12 @@ def _add_chromhmm_parser(
         help="Roadmap ChromHMM state model. Defaults to 18.",
     )
     parser.add_argument(
-        "-G",
-        "--genome",
-        choices=("hg19", "hg38"),
-        default="hg19",
-        help="Genome build for BED files. Defaults to hg19; hg38 uses lifted-over BEDs.",
+        "-s", "--species", dest="genome", metavar="SPECIES", default="hg19",
+        help=_RESOURCE_SPECIES_HELP,
+    )
+    parser.add_argument(
+        "--yes-liftover", action="store_true",
+        help="Accept generating a CrossMap script from hg38 for another build.",
     )
     parser.add_argument(
         "-i",
@@ -874,7 +985,15 @@ def _add_segway_parser(
     name: str,
     help_text: str,
 ) -> None:
-    parser = subparsers.add_parser(name, help=help_text)
+    parser = subparsers.add_parser(
+        name,
+        help=help_text,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            _RESOURCE_SPECIES_HELP
+        ),
+    )
+    parser.add_argument("species_positional", nargs="?", metavar="SPECIES")
     if name == "download-segway":
         parser.add_argument(
             "-o",
@@ -887,13 +1006,8 @@ def _add_segway_parser(
             "-d", "--data-dir", help="Generated annotation directory."
         )
     parser.add_argument(
-        "-G",
-        "--genome",
-        default="hg19",
-        help=(
-            "Genome build for BED files. Segway source files are hg19; other "
-            "builds require --yes-liftover to write a CrossMap script."
-        ),
+        "-s", "--species", dest="genome", metavar="SPECIES", default="hg19",
+        help=_RESOURCE_SPECIES_HELP,
     )
     parser.add_argument(
         "-i",
@@ -944,7 +1058,7 @@ def _add_segway_parser(
         "--yes-liftover",
         action="store_true",
         help=(
-            "For non-hg19 --genome requests, download hg19 files and write a "
+            "For non-hg19 --species requests, download hg19 files and write a "
             "CrossMap liftover script without prompting."
         ),
     )
@@ -976,6 +1090,47 @@ def _confirm_segway_liftover(genome: str) -> bool:
     return response in {"y", "yes"}
 
 
+def _write_external_liftover_scripts(
+    source_dir: Path,
+    resource_name: str,
+    target_genomes: Sequence[str],
+    yes_liftover: bool,
+) -> None:
+    """Write hg38-to-target helpers for resources absent from the package."""
+
+    for target_genome in target_genomes:
+        if not yes_liftover and not _confirm_generic_liftover(
+            resource_name, target_genome
+        ):
+            raise UnknownResourceError(
+                "{} has no packaged {} file. Re-run with --yes-liftover to "
+                "write a CrossMap script from hg38.".format(
+                    target_genome, resource_name
+                )
+            )
+        output_dir = source_dir / ".liftover" / target_genome
+        script = write_liftover_script(
+            source_dir,
+            output_dir,
+            "hg38",
+            target_genome,
+            source_dir / "liftover_hg38_to_{}.sh".format(target_genome),
+            install_root=source_dir,
+            rename_genome_prefix=resource_name in {"blacklists", "cgi"},
+        )
+        print("liftover_script\t{}".format(script))
+
+
+def _confirm_generic_liftover(resource_name: str, genome: str) -> bool:
+    if not sys.stdin.isatty():
+        return False
+    response = input(
+        "{} has no packaged {} file. Generate a CrossMap script from hg38 "
+        "for {}? [y/N] ".format(genome, resource_name, genome)
+    )
+    return response.strip().lower() in {"y", "yes"}
+
+
 def _install_components_from_args(args: argparse.Namespace) -> Optional[Sequence[str]]:
     components = list(args.components or ())
     components.extend(args.component_options or ())
@@ -999,6 +1154,47 @@ def _gencode_feature_install_scope(args: argparse.Namespace) -> tuple:
     if version is None:
         version = "def"
     return species, version
+
+
+def _dry_run_gtf_url(species: str, version: str, cache_dir: Optional[str]) -> str:
+    """Validate the initial URL and interactively resolve 404 alternatives."""
+
+    url = resolve_gencode_gtf_url(species, version, cache_dir=cache_dir)
+    if gtf_url_is_available(url):
+        return url
+
+    candidates = []
+    for fields, candidate_url in ensembl_gtf_url_candidates(
+        species, version, cache_dir=cache_dir
+    ):
+        if gtf_url_is_available(candidate_url):
+            candidates.append((fields, candidate_url))
+    if not candidates:
+        raise ValueError(
+            "No non-404 GTF URL found after resolving Ensembl species catalog for {!r}.".format(
+                species
+            )
+        )
+    if len(candidates) == 1:
+        return candidates[0][1]
+
+    print("Multiple non-404 GTF URLs found; select one:", file=sys.stderr)
+    print("#\tassembly\tspecies\tdivision\tname\tassembly_accession", file=sys.stderr)
+    for index, (fields, candidate_url) in enumerate(candidates, start=1):
+        print(
+            "{}\t{}\t{}\t{}\t{}\t{}\n  {}".format(
+                index, fields[3], fields[0], fields[2], fields[1], fields[4], candidate_url
+            ),
+            file=sys.stderr,
+        )
+    while True:
+        choice = input("Select GTF URL [1-{}]: ".format(len(candidates))).strip()
+        try:
+            selected = int(choice)
+        except ValueError:
+            selected = 0
+        if 1 <= selected <= len(candidates):
+            return candidates[selected - 1][1]
 
 
 def _gencode_feature_specs(species: str, version: str) -> tuple:

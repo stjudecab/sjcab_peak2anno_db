@@ -271,7 +271,7 @@ def test_install_gencode_bed_cli_reuses_existing_files_by_default(
 
     monkeypatch.setattr(cli, "install_gencode_beds", fake_install)
 
-    assert cli.main(["install-bed", "-d", str(tmp_path)]) == 0
+    assert cli.main(["install-genebed", "-d", str(tmp_path)]) == 0
     assert called == {"data_dir": str(tmp_path), "overwrite": False}
 
 
@@ -287,7 +287,7 @@ def test_install_gencode_bed_cli_accepts_explicit_overwrite(
 
     monkeypatch.setattr(cli, "install_gencode_beds", fake_install)
 
-    assert cli.main(["install-bed", "-d", str(tmp_path), "--overwrite"]) == 0
+    assert cli.main(["install-genebed", "-d", str(tmp_path), "--overwrite"]) == 0
     assert called == {"data_dir": str(tmp_path), "overwrite": True}
 
 
@@ -302,7 +302,7 @@ def test_download_gencode_bed_accepts_short_output_dir(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "download_and_convert_gencode_gtf", fake_download)
 
     assert (
-        cli.main(["download-bed", "hg38", "v31", "-o", str(tmp_path)])
+        cli.main(["download-genebed", "hg38", "v31", "-o", str(tmp_path)])
         == 0
     )
     assert called["args"] == ("hg38", "v31", str(tmp_path))
@@ -340,7 +340,7 @@ def test_download_gencode_bed_defaults_to_current_output_dir(monkeypatch):
 
     monkeypatch.setattr(cli, "download_and_convert_gencode_gtf", fake_download)
 
-    assert cli.main(["download-bed", "hg38", "v31"]) == 0
+    assert cli.main(["download-genebed", "hg38", "v31"]) == 0
     assert called["args"] == ("hg38", "v31", ".")
 
 

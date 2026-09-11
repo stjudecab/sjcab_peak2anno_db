@@ -59,6 +59,8 @@ from ._install import (
     install_gencode_features,
     update_data,
 )
+from ._config import UserConfig, load_config
+from ._liftover import liftover_script, write_liftover_script
 from ._regions import (
     GENCODE_FEATURE_LIST_ORDER,
     REGION_TYPES,
@@ -120,6 +122,7 @@ __all__ = [
     "DATA_PATH_ENV_VAR",
     "DEFAULT_GENCODE_FEATURE_SPECS",
     "DEFAULT_DATA_DIR",
+    "UserConfig",
     "DEDUP_METHODS",
     "GENCODE_FEATURE_DIR_NAME",
     "GENCODE_FEATURE_LIST_ORDER",
@@ -174,10 +177,12 @@ __all__ = [
     "install_gencode_feature_set",
     "install_gencode_beds",
     "install_gencode_features",
+    "liftover_script",
     "install_segway",
     "installed_path",
     "iter_blacklists",
     "iter_resources",
+    "load_config",
     "open_binary",
     "open_text",
     "path",
@@ -198,6 +203,7 @@ __all__ = [
     "user_data_dir",
     "versions",
     "write_segway_liftover_script",
+    "write_liftover_script",
     "write_deduplong",
     "write_derived",
     "write_gencode_feature_list",

@@ -6,6 +6,7 @@ import json
 import os
 import random
 import re
+import shlex
 import shutil
 import subprocess
 import time
@@ -15,6 +16,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
 from ._download import ProgressCallback, report_progress
+from ._config import clean_cache_files, configured_sizes_clean
 from ._download_log import record_download_url
 from ._derive import _parse_bed_fields, _site_interval
 from ._gencode import (
@@ -147,7 +149,6 @@ def download_gencode_feature(
     distal_bp: Union[int, str] = 50000,
     prefix: Optional[str] = None,
     split_tss: bool = True,
-    include_type: bool = True,
     tes_bp: Union[int, str] = 2000,
     overwrite: bool = True,
     log_data_dir: Optional[PathLike] = None,
@@ -155,8 +156,10 @@ def download_gencode_feature(
     source: str = "auto",
     cache_dir: Optional[PathLike] = None,
     ucsc_annotation: str = "ens",
-    clean_cache: bool = False,
+    clean_cache: Optional[Union[bool, int]] = None,
+    sizes_clean: Optional[bool] = None,
     data_species: Optional[str] = None,
+    collector_backend: str = "python",
     *,
     gene_bed_output: Optional[PathLike] = None,
 ) -> Mapping[str, Path]:
@@ -187,7 +190,7 @@ def download_gencode_feature(
     if gene_bed is None:
         if gene_bed_output is None:
             gene_bed = target_dir / gencode_bed_filename(
-                data_species or species, version, include_type=include_type
+                data_species or species, version
             )
         else:
             gene_bed = Path(gene_bed_output).expanduser()
@@ -196,7 +199,6 @@ def download_gencode_feature(
             convert_gencode_gtf_to_bed(
                 gtf_for_regions,
                 gene_bed,
-                include_type=include_type,
             )
     else:
         gene_bed = Path(gene_bed).expanduser()
@@ -225,15 +227,21 @@ def download_gencode_feature(
             if data_species and data_species != species
             else None,
             fallback_species=species,
+            cache_dir=cache_dir,
+            gtf_path=gtf_for_regions,
+            sizes_clean=sizes_clean,
         ),
+        collector_backend=collector_backend,
     )
     report_progress(progress, "download-feature: legacy BED files done")
     outputs["list"] = write_gencode_feature_list(outputs, target_dir, label)
-    if clean_cache and gtf_path is None:
-        cached_path = Path(gtf_for_regions)
-        cache_root = user_data_dir(cache_dir) / "cache"
-        if cached_path.parent == cache_root and cached_path.exists():
-            cached_path.unlink()
+    cached_path = Path(gtf_for_regions)
+    cache_root = user_data_dir(cache_dir) / "cache"
+    clean_cache_files(
+        cache_root,
+        clean_cache,
+        current_path=cached_path if cached_path.parent == cache_root else None,
+    )
     outputs["gene_bed"] = Path(gene_bed).expanduser()
     report_progress(
         progress,
@@ -256,7 +264,6 @@ def download_gencode_tss_flank_region_unions(
     distal_bp: Union[int, str] = 50000,
     prefix: Optional[str] = None,
     split_tss: bool = True,
-    include_type: bool = True,
     tes_bp: Union[int, str] = 2000,
     overwrite: bool = True,
     log_data_dir: Optional[PathLike] = None,
@@ -275,7 +282,6 @@ def download_gencode_tss_flank_region_unions(
         distal_bp=distal_bp,
         prefix=prefix,
         split_tss=split_tss,
-        include_type=include_type,
         tes_bp=tes_bp,
         overwrite=overwrite,
         log_data_dir=log_data_dir,
@@ -324,6 +330,7 @@ def write_legacy_gencode_feature_unions(
     split_tss: bool = True,
     chrom_sizes: Optional[PathLike] = None,
     backend: str = "auto",
+    collector_backend: str = "python",
 ) -> Mapping[str, Path]:
     """Write legacy CAB/``annotate_prep.sh`` feature BED classes.
 
@@ -357,6 +364,7 @@ def write_legacy_gencode_feature_unions(
         tes=tes,
         split_tss=split_tss,
         fallback_chrom_lengths=_read_chrom_sizes(chrom_sizes),
+        backend=collector_backend,
     )
 
     target_dir = Path(output_dir).expanduser()
@@ -417,14 +425,19 @@ def _resolve_species_chrom_sizes(
     species: str,
     assembly_accession: Optional[str] = None,
     fallback_species: Optional[str] = None,
+    cache_dir: Optional[PathLike] = None,
+    gtf_path: Optional[PathLike] = None,
+    sizes_clean: Optional[bool] = None,
 ) -> Optional[Path]:
-    cache_dir = user_data_dir() / "sizes"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    raw_path = cache_dir / "{}.sizes".format(species)
-    clean_path = cache_dir / "{}.sizes.clean".format(species)
+    sizes_dir = user_data_dir(cache_dir) / "sizes"
+    sizes_dir.mkdir(parents=True, exist_ok=True)
+    raw_path = sizes_dir / "{}.sizes".format(species)
+    clean_path = sizes_dir / "{}.sizes.clean".format(species)
 
     packaged_clean = _cache_packaged_sizes(species, raw_path)
-    ucsc_build = _match_ucsc_build(species, _ucsc_gtf_builds())
+    ucsc_build = _match_ucsc_build(
+        species, _ucsc_gtf_builds(sizes_clean=sizes_clean)
+    )
     if not raw_path.exists():
         try:
             if ucsc_build is not None:
@@ -447,27 +460,71 @@ def _resolve_species_chrom_sizes(
             if candidate.exists():
                 shutil.copyfile(candidate, raw_path)
                 break
+    if not raw_path.exists() and gtf_path is not None:
+        _write_sizes_from_gtf(gtf_path, raw_path)
     if not raw_path.exists():
         return None
+
+    if not (configured_sizes_clean() if sizes_clean is None else sizes_clean):
+        return raw_path
 
     if not clean_path.exists():
         if packaged_clean is not None and packaged_clean.exists():
             shutil.copyfile(packaged_clean, clean_path)
         elif ucsc_build is not None:
-            _write_clean_chrom_sizes(
-                raw_path, clean_path, _download_ucsc_primary_chromosomes(ucsc_build)
-            )
+            try:
+                primary_chromosomes = _download_ucsc_primary_chromosomes(ucsc_build)
+            except (OSError, ValueError, KeyError, json.JSONDecodeError):
+                primary_chromosomes = None
+            if not primary_chromosomes and gtf_path is not None:
+                primary_chromosomes = _read_size_names(raw_path)
+            _write_clean_chrom_sizes(raw_path, clean_path, primary_chromosomes)
         else:
-            _write_clean_chrom_sizes(
-                raw_path,
-                clean_path,
-                _download_ensembl_primary_chromosomes(
+            try:
+                primary_chromosomes = _download_ensembl_primary_chromosomes(
                     species,
                     assembly_accession,
                     fallback_species=fallback_species,
-                ),
-            )
+                )
+            except (OSError, ValueError, KeyError, json.JSONDecodeError):
+                primary_chromosomes = None
+            if not primary_chromosomes and gtf_path is not None:
+                primary_chromosomes = _read_size_names(raw_path)
+            _write_clean_chrom_sizes(raw_path, clean_path, primary_chromosomes)
     return clean_path
+
+
+def _write_sizes_from_gtf(gtf_path: PathLike, destination: Path) -> None:
+    """Create chromosome sizes from sequence-region declarations or GTF maxima."""
+
+    lengths = {}
+    with _open_text(gtf_path) as handle:
+        for line in handle:
+            if line.startswith("##sequence-region"):
+                fields = line.rstrip("\n").split()
+                if len(fields) >= 4:
+                    lengths[fields[1]] = max(lengths.get(fields[1], 0), int(fields[3]))
+                continue
+            if not line.strip() or line.startswith("#"):
+                continue
+            fields = line.rstrip("\n").split("\t")
+            if len(fields) >= 5:
+                try:
+                    lengths[fields[0]] = max(lengths.get(fields[0], 0), int(fields[4]))
+                except ValueError:
+                    continue
+    if lengths:
+        _write_sizes(destination, sorted(lengths.items()))
+
+
+def _read_size_names(path: Path):
+    names = set()
+    with path.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            fields = line.split()
+            if len(fields) >= 2:
+                names.add(fields[0])
+    return names
 
 
 def _cache_packaged_sizes(species: str, destination: Path) -> Optional[Path]:
@@ -611,8 +668,10 @@ def _fetch_ensembl_assembly_with_fallback(
 
 
 def _fetch_ensembl_assembly(species: str):
+    species_key = species.lower().replace(" ", "_")
+    ensembl_species = _ENSEMBL_SPECIES.get(species_key, (species,))[0]
     url = "https://rest.ensembl.org/info/assembly/{}?content-type=application/json".format(
-        urllib.parse.quote(species, safe="")
+        urllib.parse.quote(ensembl_species, safe="")
     )
     try:
         payload = _fetch_json(url)
@@ -622,7 +681,7 @@ def _fetch_ensembl_assembly(species: str):
         payload = None
 
     taxonomy_url = "https://rest.ensembl.org/taxonomy/id/{}?content-type=application/json".format(
-        urllib.parse.quote(species, safe="")
+        urllib.parse.quote(ensembl_species, safe="")
     )
     taxonomy = _fetch_json(taxonomy_url)
     taxon_id = taxonomy.get("id") or taxonomy.get("taxon_id")
@@ -834,6 +893,150 @@ def _collect_legacy_gencode_feature_regions(
     tes: int,
     split_tss: bool,
     fallback_chrom_lengths: Mapping[str, int],
+    backend: str = "python",
+) -> _ParsedGencodeRegions:
+    if backend != "python":
+        return _collect_legacy_gencode_feature_regions_tool(
+            gene_bed,
+            gtf_path,
+            promoter,
+            distal,
+            tes,
+            split_tss,
+            fallback_chrom_lengths,
+            backend,
+        )
+    return _collect_legacy_gencode_feature_regions_python(
+        gene_bed,
+        gtf_path,
+        promoter,
+        distal,
+        tes,
+        split_tss,
+        fallback_chrom_lengths,
+    )
+
+
+def _collect_legacy_gencode_feature_regions_tool(
+    gene_bed: PathLike,
+    gtf_path: PathLike,
+    promoter: int,
+    distal: int,
+    tes: int,
+    split_tss: bool,
+    fallback_chrom_lengths: Mapping[str, int],
+    backend: str,
+) -> _ParsedGencodeRegions:
+    """Run an external input-normalization backend before exact Python logic.
+
+    The external tools are deliberately limited to parsing/filtering/sorting;
+    the strand and transcript semantics remain shared with the reference path.
+    This makes backend timings comparable without changing generated regions.
+    """
+
+    if backend not in {"awk", "bedtools", "pybedtools"}:
+        raise ValueError(
+            "Unknown collector backend {!r}; choose python, awk, bedtools, or pybedtools.".format(
+                backend
+            )
+        )
+    temporary_root = Path(
+        os.environ.get("TMPDIR", "/lustre_scratch/user_scratch/bxu2/TMPDIR/codex")
+    ) / (
+        "sjcab-collector-{}-{}".format(os.getpid(), random.randint(0, 10**9))
+    )
+    temporary_root.mkdir(parents=True, exist_ok=True)
+    filtered_gtf = temporary_root / "exons.gtf"
+    sorted_gene_bed = temporary_root / "genes.bed"
+    try:
+        if backend == "awk":
+            _run_awk_collector_inputs(gtf_path, gene_bed, filtered_gtf, sorted_gene_bed)
+        elif backend == "bedtools":
+            _run_awk_collector_inputs(gtf_path, gene_bed, filtered_gtf, sorted_gene_bed)
+            _run_bedtools_sort(sorted_gene_bed)
+        else:
+            _run_pybedtools_collector_inputs(
+                gtf_path, gene_bed, filtered_gtf, sorted_gene_bed
+            )
+        return _collect_legacy_gencode_feature_regions_python(
+            sorted_gene_bed,
+            filtered_gtf,
+            promoter,
+            distal,
+            tes,
+            split_tss,
+            fallback_chrom_lengths,
+            flank_backend="bedtools" if backend == "bedtools" else None,
+            merge_backend="bedtools" if backend == "bedtools" else None,
+            temporary_root=temporary_root,
+        )
+    finally:
+        shutil.rmtree(temporary_root, ignore_errors=True)
+
+
+def _run_awk_collector_inputs(
+    gtf_path: PathLike,
+    gene_bed: PathLike,
+    filtered_gtf: Path,
+    sorted_gene_bed: Path,
+) -> None:
+    gtf_input = (
+        "gzip -cd -- {}" if str(gtf_path).lower().endswith((".gz", ".bgz"))
+        else "cat {}"
+    ).format(shlex.quote(str(gtf_path)))
+    gtf_command = (
+        "{} | awk 'BEGIN{{OFS=\"\\t\"}} /^##sequence-region/{{print}} "
+        "$0 !~ /^#/ && $3==\"exon\"{{print}}' > {}"
+    ).format(gtf_input, shlex.quote(str(filtered_gtf)))
+    bed_command = "awk '$0 !~ /^#/ && NF>=6' {} > {}".format(
+        shlex.quote(str(gene_bed)), shlex.quote(str(sorted_gene_bed))
+    )
+    subprocess.run(gtf_command, shell=True, check=True)
+    subprocess.run(bed_command, shell=True, check=True)
+
+
+def _run_bedtools_sort(gene_bed: Path) -> None:
+    executable = shutil.which("bedtools")
+    if executable is None:
+        raise RuntimeError("bedtools is not installed")
+    temporary = gene_bed.with_suffix(".sorted")
+    with temporary.open("w", encoding="utf-8") as handle:
+        subprocess.run(
+            [executable, "sort", "-i", str(gene_bed)],
+            check=True,
+            stdout=handle,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    temporary.replace(gene_bed)
+
+
+def _run_pybedtools_collector_inputs(
+    gtf_path: PathLike,
+    gene_bed: PathLike,
+    filtered_gtf: Path,
+    sorted_gene_bed: Path,
+) -> None:
+    from pybedtools import BedTool
+
+    BedTool(str(gene_bed)).sort().saveas(str(sorted_gene_bed))
+    with filtered_gtf.open("w", encoding="utf-8") as handle:
+        for line in BedTool(str(gtf_path)):
+            if len(line.fields) >= 3 and line.fields[2] == "exon":
+                handle.write(str(line))
+
+
+def _collect_legacy_gencode_feature_regions_python(
+    gene_bed: PathLike,
+    gtf_path: PathLike,
+    promoter: int,
+    distal: int,
+    tes: int,
+    split_tss: bool,
+    fallback_chrom_lengths: Mapping[str, int],
+    flank_backend: Optional[str] = None,
+    merge_backend: Optional[str] = None,
+    temporary_root: Optional[Path] = None,
 ) -> _ParsedGencodeRegions:
     intervals = {
         region_type: {}
@@ -869,10 +1072,28 @@ def _collect_legacy_gencode_feature_regions(
         distal=distal,
         tes=tes,
         split_tss=split_tss,
+        flank_intervals=(
+            _bedtools_flank_intervals(
+                gene_bed,
+                chrom_lengths,
+                promoter,
+                distal,
+                split_tss,
+                temporary_root,
+            )
+            if flank_backend == "bedtools" and split_tss
+            else None
+        ),
     )
 
     chrom_order = tuple(chrom_seen.keys())
     merged = {}  # type: Dict[str, Dict[str, List[Tuple[int, int]]]]
+    def merge_intervals(values, order, max_gap):
+        if merge_backend == "bedtools":
+            return _merge_interval_map_bedtools(
+                values, order, max_gap, temporary_root
+            )
+        return _merge_interval_map(values, order, max_gap=max_gap)
     dis5_intervals = _subtract_interval_map(
         intervals["dis5"],
         intervals["promoter.up"],
@@ -884,25 +1105,25 @@ def _collect_legacy_gencode_feature_regions(
         chrom_order,
     )
     for region_type in ("promoter.up", "promoter.down", "exon", "tes"):
-        merged[region_type] = _merge_interval_map(
+        merged[region_type] = merge_intervals(
             intervals[region_type],
             chrom_order,
             max_gap=2,
         )
-    merged["dis5"] = _merge_interval_map(dis5_intervals, chrom_order, max_gap=2)
-    merged["dis3"] = _merge_interval_map(dis3_intervals, chrom_order, max_gap=2)
+    merged["dis5"] = merge_intervals(dis5_intervals, chrom_order, max_gap=2)
+    merged["dis3"] = merge_intervals(dis3_intervals, chrom_order, max_gap=2)
 
     promoter_source = _combine_interval_maps(
         intervals["promoter.up"],
         intervals["promoter.down"],
     )
-    merged["promoter"] = _merge_interval_map(
+    merged["promoter"] = merge_intervals(
         promoter_source,
         chrom_order,
         max_gap=2,
     )
 
-    merged_introns = _merge_interval_map(
+    merged_introns = merge_intervals(
         intervals["intron"],
         chrom_order,
         max_gap=2,
@@ -921,7 +1142,7 @@ def _collect_legacy_gencode_feature_regions(
         merged["dis5"],
         merged["tes"],
     )
-    merged_union = _merge_interval_map(feature_union, chrom_order, max_gap=2)
+    merged_union = merge_intervals(feature_union, chrom_order, max_gap=2)
     merged["intergenic"] = _complement_merged_intervals(
         merged_union,
         chrom_lengths,
@@ -985,7 +1206,29 @@ def _collect_legacy_gene_bed_regions(
     distal: int,
     tes: int,
     split_tss: bool,
+    flank_intervals: Optional[Tuple[Dict[str, Dict[str, List[Tuple[int, int]]]], Dict[str, List[Tuple[int, int]]]]] = None,
 ) -> None:
+    if flank_intervals is not None:
+        generated, dis3_inner = flank_intervals
+        for region_type, values in generated.items():
+            for chrom, chrom_intervals in values.items():
+                for interval in chrom_intervals:
+                    _add_interval(intervals[region_type], chrom, interval)
+                    _record_interval_max_end(chrom_max_end, chrom, interval[1])
+        for chrom, chrom_intervals in dis3_inner.items():
+            for interval in chrom_intervals:
+                _add_interval(intervals["_dis3_inner"], chrom, interval)
+                _record_interval_max_end(chrom_max_end, chrom, interval[1])
+        with Path(gene_bed).expanduser().open("r", encoding="utf-8") as handle:
+            for line_number, line in enumerate(handle, start=1):
+                if not line.strip() or line.startswith("#"):
+                    continue
+                fields = _parse_bed_fields(line, line_number)
+                chrom = fields[0]
+                chrom_seen.setdefault(chrom, None)
+                _record_interval_max_end(chrom_max_end, chrom, int(fields[2]))
+        return
+
     with Path(gene_bed).expanduser().open("r", encoding="utf-8") as handle:
         for line_number, line in enumerate(handle, start=1):
             if not line.strip() or line.startswith("#"):
@@ -1063,6 +1306,163 @@ def _collect_legacy_gene_bed_regions(
             ):
                 for _start, end in intervals[region_type].get(chrom, [])[-2:]:
                     _record_interval_max_end(chrom_max_end, chrom, end)
+
+
+def _bedtools_flank_intervals(
+    gene_bed: PathLike,
+    chrom_lengths: Mapping[str, int],
+    promoter: int,
+    distal: int,
+    split_tss: bool,
+    temporary_root: Optional[Path],
+):
+    """Construct strand-aware TSS/TES flanks with bedtools slop."""
+
+    executable = shutil.which("bedtools")
+    if executable is None or not split_tss:
+        return None
+    if temporary_root is None:
+        temporary_root = Path(
+            os.environ.get("TMPDIR", "/lustre_scratch/user_scratch/bxu2/TMPDIR/codex")
+        ) / "sjcab-bedtools-slop-{}".format(os.getpid())
+        temporary_root.mkdir(parents=True, exist_ok=True)
+
+    genome_path = temporary_root / "genome.sizes"
+    tss_path = temporary_root / "tss.bed"
+    tes_path = temporary_root / "tes.bed"
+    with tss_path.open("w", encoding="utf-8") as tss_handle, tes_path.open(
+        "w", encoding="utf-8"
+    ) as tes_handle:
+        for line_number, line in enumerate(
+            Path(gene_bed).expanduser().open("r", encoding="utf-8"), start=1
+        ):
+            if not line.strip() or line.startswith("#"):
+                continue
+            fields = _parse_bed_fields(line, line_number)
+            start = int(fields[1])
+            end = int(fields[2])
+            tss = end - 1 if fields[5] == "-" else start
+            tes = start if fields[5] == "-" else end - 1
+            tss_handle.write("{}\t{}\t{}\t.\t0\t{}\n".format(fields[0], tss, tss + 1, fields[5]))
+            tes_handle.write("{}\t{}\t{}\t.\t0\t{}\n".format(fields[0], tes, tes + 1, fields[5]))
+
+    lengths = dict(chrom_lengths)
+    for path in (tss_path, tes_path):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            fields = line.split("\t")
+            if len(fields) >= 3:
+                lengths[fields[0]] = max(lengths.get(fields[0], 0), int(fields[2]) + distal)
+    with genome_path.open("w", encoding="utf-8") as handle:
+        for chrom, length in lengths.items():
+            handle.write("{}\t{}\n".format(chrom, max(1, length)))
+
+    outputs = {}
+    for label, source, left, right in (
+        ("tss_promoter_up", tss_path, promoter, 0),
+        ("tss_promoter_down", tss_path, 0, promoter),
+        ("tss_distal_up", tss_path, distal, 0),
+        ("tes_distal_down", tes_path, 0, distal),
+        ("tes_promoter_down", tes_path, 0, promoter),
+        ("tes_up", tes_path, tes, 0),
+        ("tes_down", tes_path, 0, tes),
+    ):
+        output = temporary_root / (label + ".bed")
+        _run_bedtools_slop(executable, source, genome_path, output, left, right)
+        outputs[label] = _read_bed_interval_map(output)
+    return (
+        {
+            "promoter.up": outputs["tss_promoter_up"],
+            "promoter.down": outputs["tss_promoter_down"],
+            "dis5": outputs["tss_distal_up"],
+            "dis3": outputs["tes_distal_down"],
+            "tes": {
+                chrom: outputs["tes_up"].get(chrom, [])
+                + outputs["tes_down"].get(chrom, [])
+                for chrom in set(outputs["tes_up"]) | set(outputs["tes_down"])
+            },
+        },
+        outputs["tes_promoter_down"],
+    )
+
+
+def _run_bedtools_slop(
+    executable: str,
+    source: Path,
+    genome: Path,
+    output: Path,
+    left: int,
+    right: int,
+) -> None:
+    with output.open("w", encoding="utf-8") as handle:
+        subprocess.run(
+            [
+                executable,
+                "slop",
+                "-i",
+                str(source),
+                "-g",
+                str(genome),
+                "-l",
+                str(left),
+                "-r",
+                str(right),
+                "-s",
+            ],
+            check=True,
+            stdout=handle,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+
+def _read_bed_interval_map(path: Path):
+    result = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        fields = line.split("\t")
+        if len(fields) >= 3:
+            _add_interval(result, fields[0], (int(fields[1]), int(fields[2])))
+    return result
+
+
+def _merge_interval_map_bedtools(
+    intervals_by_chrom: Mapping[str, List[Tuple[int, int]]],
+    chrom_order: Tuple[str, ...],
+    max_gap: int,
+    temporary_root: Optional[Path],
+):
+    """Merge an interval map with bedtools sort/merge."""
+
+    executable = shutil.which("bedtools")
+    if executable is None or temporary_root is None:
+        return _merge_interval_map(intervals_by_chrom, chrom_order, max_gap=max_gap)
+    records = temporary_root / "merge.records.bed"
+    sorted_records = temporary_root / "merge.sorted.bed"
+    merged_records = temporary_root / "merge.output.bed"
+    with records.open("w", encoding="utf-8") as handle:
+        for chrom in chrom_order:
+            for start, end in intervals_by_chrom.get(chrom, []):
+                if end > start:
+                    handle.write("{}\t{}\t{}\n".format(chrom, start, end))
+    try:
+        with sorted_records.open("w", encoding="utf-8") as handle:
+            subprocess.run(
+                [executable, "sort", "-i", str(records)],
+                check=True,
+                stdout=handle,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+        with merged_records.open("w", encoding="utf-8") as handle:
+            subprocess.run(
+                [executable, "merge", "-i", str(sorted_records), "-d", str(max_gap)],
+                check=True,
+                stdout=handle,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+        return _read_bed_interval_map(merged_records)
+    except (OSError, subprocess.SubprocessError):
+        return _merge_interval_map(intervals_by_chrom, chrom_order, max_gap=max_gap)
 
 
 def _record_sequence_region(

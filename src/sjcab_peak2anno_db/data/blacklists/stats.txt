@@ -5,8 +5,6 @@
   1411 hg18-blacklist.bed
   1871 hg19-blacklist.bed
   2375 hg38-blacklist.bed
-  1383 hg38_rDNA-blacklist.bed
-  1383 hg38_rDNA_only-blacklist.bed
   4874 mm10-blacklist.bed
   3004 mm39-blacklist.bed
   3038 mm9-blacklist.bed

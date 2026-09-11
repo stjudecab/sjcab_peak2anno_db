@@ -26,6 +26,46 @@ Every command that downloads a file appends the source URL to
 `{data_dir}/download_urls.log`. Long-running install/download commands print
 progress to stderr; stdout is reserved for generated paths and command results.
 
+## User configuration
+
+Optional RC files are read from `~/.sjcab_peak2anno.rc` and
+`$XDG_CONFIG_HOME/sjcab_peak2anno/.sjcab_peak2anno.rc` (the XDG file takes
+precedence). Set `SJCAB_PEAK2ANNO_CONFIG` to add a specific RC file; that file
+has the highest RC precedence. Explicit command-line arguments take precedence
+over configuration; environment variables beginning with
+`SJCAB_PEAK2ANNO_DB_` take precedence over RC values.
+
+Example:
+
+```text
+SJCAB_PEAK2ANNO_DB_PATH=/path/to/sjcab_peak2anno_db
+SJCAB_PEAK2ANNO_DB_INSTALL_OPTIONS=bed,feature,blacklists,cgi
+SJCAB_PEAK2ANNO_DB_INSTALL_SPECIES_VERSIONS=hg38:v31,hg19:v31lift37,mm39:vM39
+SJCAB_PEAK2ANNO_DB_SPECIES_TXT_STALE_DAYS=90
+SJCAB_PEAK2ANNO_DB_SIZESCLEAN=1
+SJCAB_PEAK2ANNO_DB_CLEANCACHE=90
+```
+
+RC keys use the same names as the environment variables; the
+`SJCAB_PEAK2ANNO_DB_` prefix is optional for backwards-compatible short keys.
+`SJCAB_PEAK2ANNO_DB_PATH` sets the default data directory. `INSTALL_OPTIONS`
+accepts `bed`,
+`feature`, `blacklists`, and `cgi` (or their component names
+`anno-bed`/`anno-feature`). `INSTALL_SPECIES_VERSIONS` controls the default
+species/version pairs used by the feature installer. Species and versions may
+also be supplied separately with `SJCAB_PEAK2ANNO_DB_INSTALL_SPECIES` and
+`SJCAB_PEAK2ANNO_DB_INSTALL_VERSIONS`.
+
+`SPECIES_TXT_STALE_DAYS` controls refresh of the Ensembl `VERSION`,
+`species_EnsemblVertebrates.txt`, and `species.txt` catalogs. `SIZESCLEAN=1`
+creates `.sizes.clean` files by default; set it to `0` to disable them. The
+`--sizes-clean 0` option is available on feature-generation and `install`
+commands. `CLEANCACHE` is an age
+in days: the default is `90`, so cache files older than 90 days are removed
+after BED generation. A negative value removes the newly used cached GTF
+immediately. The command-line form is `--clean-cache [DAYS]`; using
+`--clean-cache` without a value means immediate cleanup.
+
 ## Annotation Bed
 
 Annotation BED resources provide transcript-level gene annotations. Two isoform
@@ -37,30 +77,30 @@ sets are generated:
 The `def` directory points to the registry-defined default version for each
 species, not necessarily the newest parsed GENCODE release.
 
-### `install-bed` / `download-bed`
+### `install-genebed` / `download-genebed`
 
-`install-bed` installs the package's configured GENCODE BED set into the
-user data directory. `download-bed` processes one species/version into a
+`install-genebed` installs the package's configured GENCODE BED set into the
+user data directory. `download-genebed` processes one species/version into a
 chosen output directory.
 
 ```bash
 # Install or regenerate annotation BED resources.
-sjcab-peak2anno-db install-bed
-sjcab-peak2anno-db install-bed -d /path/to/sjcab_peak2anno_db
-sjcab-peak2anno-db install-bed --overwrite
+sjcab-peak2anno-db install-genebed
+sjcab-peak2anno-db install-genebed -d /path/to/sjcab_peak2anno_db
+sjcab-peak2anno-db install-genebed --overwrite
 
-sjcab-peak2anno-db download-bed hg38 v31 -o annotations
-sjcab-peak2anno-db download-bed hg19 v31lift37 -o annotations
-sjcab-peak2anno-db download-bed mm10 vM22 -g gencode.vM22.annotation.gtf.gz -o annotations
-sjcab-peak2anno-db download-bed human 100
-sjcab-peak2anno-db download-bed human def
+sjcab-peak2anno-db download-genebed hg38 v31 -o annotations
+sjcab-peak2anno-db download-genebed hg19 v31lift37 -o annotations
+sjcab-peak2anno-db download-genebed mm10 vM22 -g gencode.vM22.annotation.gtf.gz -o annotations
+sjcab-peak2anno-db download-genebed human 100
+sjcab-peak2anno-db download-genebed human def
 ```
 
-`install-bed` reuses existing generated files by default. Use
+`install-genebed` reuses existing generated files by default. Use
 `--overwrite` when you intentionally want to regenerate the whole installed BED
 layout.
 
-`download-bed` downloads or reuses the expected GTF. It first checks the
+`download-genebed` downloads or reuses the expected GTF. It first checks the
 `cache` cache, then the output directory and current working directory,
 before downloading. Use `--gtf-path`/`-g` to force a specific local GTF or
 `--url`/`-u` to use a custom URL. Species not covered by the bundled GENCODE
@@ -72,7 +112,9 @@ automatic source selection is used by `download-feature`.
 `-o/--output-dir` defaults to the current working directory; it is not required.
 Downloaded GTFs are stored in `{data_dir}/cache/`, where `{data_dir}` is
 `--data-dir`, `SJCAB_PEAK2ANNO_DB_PATH`, or `~/.sjcab_peak2anno_db`. Use
-`--clean-cache` to remove the GTF after its BED files have been generated.
+`--clean-cache [DAYS]` to remove cache files older than `DAYS` after BED files
+have been generated; use a negative value to remove the current cached GTF
+immediately.
 Known Ensembl chromosome sizes are bundled with the package. UCSC sizes are
 bundled for the latest two assemblies per species when available. Runtime
 copies are cached in `{data_dir}/sizes/{species}.sizes`; the corresponding
@@ -263,7 +305,7 @@ directory.
 
 `install-feature -o DIR` reuses preprocessed feature files from `DIR`
 when `order.lst` and the expected feature BED files are already present. Like
-`download-bed`, feature generation reuses the cached GTF, then an expected GTF
+`download-genebed`, feature generation reuses the cached GTF, then an expected GTF
 from the output directory or current working directory before downloading.
 `install-feature` reuses existing generated files by default; pass
 `--overwrite` to rebuild the installed annotation BED prerequisite and feature
@@ -273,11 +315,11 @@ For UCSC short genome IDs, select the UCSC gene table when needed:
 
 ```bash
 # Use the UCSC RefSeq gene annotation for the T2T human build.
-sjcab-peak2anno-db download-bed hs1 1 --ucsc-source refseq
+sjcab-peak2anno-db download-genebed hs1 1 --ucsc-source refseq
 # Use the UCSC RefSeq gene annotation for the alpaca build.
-sjcab-peak2anno-db download-bed vicPac2 1 --ucsc-source refseq
+sjcab-peak2anno-db download-genebed vicPac2 1 --ucsc-source refseq
 # Use the UCSC Ensembl gene annotation for the yeast build.
-sjcab-peak2anno-db download-bed sacCer3 R64-1-1 --ucsc-source ens
+sjcab-peak2anno-db download-genebed sacCer3 R64-1-1 --ucsc-source ens
 ```
 
 UCSC files are selected from `bigZips/genes/`; `ens` uses `ensGene` and
@@ -350,16 +392,18 @@ writes into the selected output directory.
 
 ```bash
 # Install Roadmap ChromHMM resources for selected genomes and samples.
-sjcab-peak2anno-db install-chromhmm -m 18 -G hg19 -i E001,E063
-sjcab-peak2anno-db install-chromhmm -m 18 -G hg38 -i E063
+sjcab-peak2anno-db install-chromhmm -m 18 -s hg19 -i E001,E063
+sjcab-peak2anno-db install-chromhmm -m 18 -s hg38 -i E063
 
-sjcab-peak2anno-db download-chromhmm -o chromhmm_downloads -m 25 -G hg19 -c GM12878
-sjcab-peak2anno-db download-chromhmm -o chromhmm_downloads -m 18 -G hg38 -i E063
+sjcab-peak2anno-db download-chromhmm -o chromhmm_downloads -m 25 -s hg19 -c GM12878
+sjcab-peak2anno-db download-chromhmm -o chromhmm_downloads -m 18 -s hg38 -i E063
 sjcab-peak2anno-db download-chromhmm -o chromhmm_downloads -m 15 -t brain
 ```
 
-ChromHMM defaults to Roadmap hg19 BED files. Use `--genome hg38`/`-G hg38` for
-Roadmap lifted-over BEDs. Select records with epigenome IDs (`--ids`/`-i`),
+ChromHMM defaults to Roadmap hg19 BED files. Use `--species hg38`/`-s hg38` for
+Roadmap lifted-over BEDs. Other UCSC builds use `--yes-liftover` and the hg38
+chain files listed at `https://hgdownload.soe.ucsc.edu/goldenPath/hg38/liftOver/`.
+Select records with epigenome IDs (`--ids`/`-i`),
 fuzzy tissue/group text (`--tissue`/`-t`), or fuzzy sample/cell-line text
 (`--cellline`/`-c`).
 
@@ -414,7 +458,7 @@ whether to download hg19 and write a CrossMap liftover helper script. In
 non-interactive runs, use `--yes-liftover`.
 
 ```bash
-sjcab-peak2anno-db download-segway -o segway_downloads -G hg38 --yes-liftover -i GM12878
+sjcab-peak2anno-db download-segway -o segway_downloads -s hg38 --yes-liftover -i GM12878
 ```
 
 The generated script first tries to activate an existing `segway-liftover`
@@ -525,9 +569,9 @@ sjcab-peak2anno-db install anno-bed anno-feature blacklists cgi
 sjcab-peak2anno-db install -c anno-bed -c anno-feature
 sjcab-peak2anno-db install --overwrite
 
-sjcab-peak2anno-db install-bed
-sjcab-peak2anno-db download-bed hg38 v31 -o annotations
-sjcab-peak2anno-db download-bed mm10 vM22 -g gencode.vM22.annotation.gtf.gz -o annotations
+sjcab-peak2anno-db install-genebed
+sjcab-peak2anno-db download-genebed hg38 v31 -o annotations
+sjcab-peak2anno-db download-genebed mm10 vM22 -g gencode.vM22.annotation.gtf.gz -o annotations
 sjcab-peak2anno-db dedup-bed hg38 v31 -m peak -i h3k4me3_peaks.bed -o annotations
 sjcab-peak2anno-db dedup-bed mm10 vM22 -m isoID -i isoforms.txt -K ensid -o annotations
 sjcab-peak2anno-db filter-bed -b annotations/bed/hg38/v31/all.gene.bed -m perover -i active_chromhmm.bed -o annotations
@@ -538,14 +582,14 @@ sjcab-peak2anno-db install-feature hg38 v31 -o feature_downloads
 sjcab-peak2anno-db download-feature hg38 v31 -o feature_downloads
 sjcab-peak2anno-db download-feature all all -o feature_downloads
 
-sjcab-peak2anno-db install-chromhmm -m 18 -G hg19 -i E001,E063
-sjcab-peak2anno-db install-chromhmm -m 18 -G hg38 -i E063
-sjcab-peak2anno-db download-chromhmm -o chromhmm_downloads -m 25 -G hg19 -c GM12878
-sjcab-peak2anno-db download-chromhmm -o chromhmm_downloads -m 18 -G hg38 -i E063
+sjcab-peak2anno-db install-chromhmm -m 18 -s hg19 -i E001,E063
+sjcab-peak2anno-db install-chromhmm -m 18 -s hg38 -i E063
+sjcab-peak2anno-db download-chromhmm -o chromhmm_downloads -m 25 -s hg19 -c GM12878
+sjcab-peak2anno-db download-chromhmm -o chromhmm_downloads -m 18 -s hg38 -i E063
 
 sjcab-peak2anno-db install-segway -i GM12878,H1-HESC
 sjcab-peak2anno-db download-segway -o segway_downloads -t brain
-sjcab-peak2anno-db download-segway -o segway_downloads -G hg38 --yes-liftover -i GM12878
+sjcab-peak2anno-db download-segway -o segway_downloads -s hg38 --yes-liftover -i GM12878
 
 sjcab-peak2anno-db install-blacklists
 sjcab-peak2anno-db install-cgi
