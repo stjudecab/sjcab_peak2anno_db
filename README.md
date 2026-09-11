@@ -26,6 +26,42 @@ Every command that downloads a file appends the source URL to
 `{data_dir}/download_urls.log`. Long-running install/download commands print
 progress to stderr; stdout is reserved for generated paths and command results.
 
+## Command conventions and common options
+
+The only general difference between command pairs is the destination:
+
+- `install-*`: install or generate resources under the configured `db_path`
+  directory.
+- `download-*`: write downloaded/generated resources under `--output-dir` (or
+  the command's output default).
+
+Common option styles:
+
+- `-s`, `--species SPECIES`: select a species or genome build. Commands that
+  take a species as their first positional argument also accept this form when
+  supported.
+- `VERSION`: select a release/version, such as `v31`, `vM39`, `def`, or
+  `latest`, where supported.
+- `-d`, `--data-dir DIR`: override the database/cache directory for commands
+  that read or install the database.
+- `-o`, `--output-dir DIR`: select a staging/output directory for download
+  commands.
+- `-n`, `--no-overwrite`: preserve existing files. `--overwrite` rewrites them
+  where supported.
+- `--clean-cache [DAYS]`: remove cache files older than `DAYS` after BED
+  generation. The default is 90 days; using it without a value removes the
+  current cached GTF immediately, and negative values have the same immediate
+  cleanup behavior.
+- `--sizes-clean [0|1]`: create `.sizes.clean` files by default. Use
+  `--sizes-clean 0` to disable them.
+- `-g`, `--gtf-path FILE`: use an existing local GTF instead of downloading
+  one.
+- `-u`, `--url URL`: override the resolved GTF URL.
+- `--ucsc-source {ens,refseq}`: select the UCSC gene-table source when a UCSC
+  build is used.
+- `-dry-run`: resolve and print downloadable URLs without downloading, where
+  supported.
+
 ## User configuration
 
 Optional RC files are read from `~/.sjcab_peak2anno.rc` and
@@ -79,10 +115,6 @@ species, not necessarily the newest parsed GENCODE release.
 
 ### `install-genebed` / `download-genebed`
 
-`install-genebed` installs the package's configured GENCODE BED set into the
-user data directory. `download-genebed` processes one species/version into a
-chosen output directory.
-
 ```bash
 # Install or regenerate annotation BED resources.
 sjcab-peak2anno-db install-genebed
@@ -95,10 +127,6 @@ sjcab-peak2anno-db download-genebed mm10 vM22 -g gencode.vM22.annotation.gtf.gz 
 sjcab-peak2anno-db download-genebed human 100
 sjcab-peak2anno-db download-genebed human def
 ```
-
-`install-genebed` reuses existing generated files by default. Use
-`--overwrite` when you intentionally want to regenerate the whole installed BED
-layout.
 
 `download-genebed` downloads or reuses the expected GTF. It first checks the
 `cache` cache, then the output directory and current working directory,
@@ -280,10 +308,6 @@ input. The default prefix is the promoter size label, usually `2kb`.
 
 ### `install-feature` / `download-feature`
 
-`install-feature` installs default feature builds into the user data
-directory. `download-feature` writes feature files into a staging/output
-directory.
-
 ```bash
 # Install or generate merged feature BED resources.
 sjcab-peak2anno-db install-feature all all
@@ -387,9 +411,6 @@ metadata.
 
 ### `install-chromhmm` / `download-chromhmm`
 
-`install-chromhmm` writes into the user data directory. `download-chromhmm`
-writes into the selected output directory.
-
 ```bash
 # Install Roadmap ChromHMM resources for selected genomes and samples.
 sjcab-peak2anno-db install-chromhmm -m 18 -s hg19 -i E001,E063
@@ -438,8 +459,7 @@ downloaded files.
 
 ### `install-segway` / `download-segway`
 
-`install-segway` writes into the user data directory. `download-segway` writes
-into the selected output directory. With no selector, the command downloads
+With no selector, the command downloads
 `segway_encyclopedia.bed.gz`. Existing files are skipped by default; pass
 `--overwrite` to replace them.
 
