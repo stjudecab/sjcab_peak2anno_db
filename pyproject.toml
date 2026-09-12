@@ -25,6 +25,11 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
 
+[project.urls]
+Homepage = "https://github.com/stjudecab/sjcab_peak2anno_db"
+Repository = "https://github.com/stjudecab/sjcab_peak2anno_db"
+Issues = "https://github.com/stjudecab/sjcab_peak2anno_db/issues"
+
 [project.scripts]
 sjcab-peak2anno-db = "sjcab_peak2anno_db._cli:main"
 

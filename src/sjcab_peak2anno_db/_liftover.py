@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import urllib.parse
 from pathlib import Path
 from typing import Optional, Union
 
@@ -19,6 +18,7 @@ def liftover_script(
     env_name: str = "sjcab-liftover",
     install_root: Optional[PathLike] = None,
     rename_genome_prefix: bool = False,
+    cache_dir: Optional[PathLike] = None,
 ) -> str:
     """Return a bash script that lifts BED and BED.GZ files in a directory."""
 
@@ -27,9 +27,11 @@ def liftover_script(
     if source == target:
         raise ValueError("Source and target genomes must differ for liftover.")
     chain_name = "{}To{}.over.chain.gz".format(source, _ucsc_token(target))
-    chain_url = urllib.parse.urljoin(
-        UCSC_LIFTOVER_ROOT.format(source), chain_name
-    )
+    from ._gencode import ucsc_liftover_chain_url
+    from ._registry import user_data_dir
+
+    chain_url = ucsc_liftover_chain_url(source, chain_name, cache_dir=cache_dir)
+    chain_cache_dir = user_data_dir(cache_dir) / "cache" / "chains"
     install_root_text = (
         _shell_quote(str(Path(install_root).expanduser()))
         if install_root is not None
@@ -43,14 +45,16 @@ TARGET={target}
 INPUT_DIR={input_dir}
 OUTPUT_DIR={output_dir}
 INSTALL_ROOT={install_root}
-CHAIN_DIR="${{OUTPUT_DIR}}/chains"
+CHAIN_DIR={chain_dir}
 CHAIN="${{CHAIN_DIR}}/{chain_name}"
 TMP_DIR="${{TMPDIR:-/lustre_scratch/user_scratch/bxu2/TMPDIR/codex}}/sjcab-liftover.$$"
 mkdir -p "${{TMP_DIR}}"
 trap 'rm -rf "${{TMP_DIR}}"' EXIT
 
 mkdir -p "${{CHAIN_DIR}}" "${{OUTPUT_DIR}}"
-curl -L "{chain_url}" -o "${{CHAIN}}"
+if [ ! -s "${{CHAIN}}" ]; then
+  curl -L "{chain_url}" -o "${{CHAIN}}"
+fi
 
 activate_existing_env() {{
   if command -v micromamba >/dev/null 2>&1; then
@@ -122,20 +126,28 @@ while IFS= read -r -d '' bed; do
   else
     "${{CROSSMAP[@]}}" bed "${{CHAIN}}" "${{bed}}" "${{plain}}"
   fi
-done < <(find "${{INPUT_DIR}}" -path "${{INPUT_DIR}}/.liftover" -prune -o -type f \\\\
-  \\( -name '*.bed' -o -name '*.bed.gz' \\) -print0)
+  [ -e "${{plain}}.unmap" ] || : > "${{plain}}.unmap"
+done < <(find "${{INPUT_DIR}}" -path "${{INPUT_DIR}}/.liftover" -prune -o \\( -type f -o -type l \\) {source_filter} \\( -name '*.bed' -o -name '*.bed.gz' \\) -print0)
 
 if [ -n "${{INSTALL_ROOT}}" ]; then
-  mkdir -p "${{INSTALL_ROOT}}/{target}"
-  cp -a "${{OUTPUT_DIR}}"/. "${{INSTALL_ROOT}}/{target}/"
+  mkdir -p "${{INSTALL_ROOT}}"
+  cp -a "${{OUTPUT_DIR}}"/. "${{INSTALL_ROOT}}/"
+  rm -rf "${{OUTPUT_DIR}}"
+  rmdir "$(dirname "${{OUTPUT_DIR}}")" 2>/dev/null || true
 fi
 """.format(
         chain_name=chain_name,
         chain_url=chain_url,
+        chain_dir=_shell_quote(str(chain_cache_dir)),
         env_name=_shell_quote(env_name),
         input_dir=_shell_quote(str(Path(input_dir).expanduser())),
         install_root=install_root_text,
         output_dir=_shell_quote(str(Path(output_dir).expanduser())),
+        source_filter=(
+            "-iname {}".format(_shell_quote(source + "*"))
+            if rename_genome_prefix
+            else ""
+        ),
         rename_genome_prefix="1" if rename_genome_prefix else "0",
         source=source,
         target=target,
@@ -151,6 +163,7 @@ def write_liftover_script(
     env_name: str = "sjcab-liftover",
     install_root: Optional[PathLike] = None,
     rename_genome_prefix: bool = False,
+    cache_dir: Optional[PathLike] = None,
 ) -> Path:
     """Write :func:`liftover_script` atomically and make it executable."""
 
@@ -167,6 +180,7 @@ def write_liftover_script(
                 env_name=env_name,
                 install_root=install_root,
                 rename_genome_prefix=rename_genome_prefix,
+                cache_dir=cache_dir,
             ),
             encoding="utf-8",
         )
@@ -186,6 +200,30 @@ def _genome(value: str) -> str:
 
 
 def _ucsc_token(genome: str) -> str:
+    """Return the canonical mixed-case token used by UCSC chain files."""
+
+    prefixes = {
+        "canf": "CanF",
+        "equcab": "EquCab",
+        "bostau": "BosTau",
+        "galgal": "GalGal",
+        "xenla": "XenLa",
+        "danrer": "DanRer",
+        "susscr": "SusScr",
+        "saccer": "SacCer",
+        "orycun": "OryCun",
+        "mondom": "MonDom",
+        "pantro": "PanTro",
+        "gorgor": "GorGor",
+        "ponabe": "PonAbe",
+        "caljac": "CalJac",
+        "chlsab": "ChlSab",
+        "tetnig": "TetNig",
+    }
+    lowered = genome.lower()
+    for prefix, canonical in prefixes.items():
+        if lowered.startswith(prefix):
+            return canonical + genome[len(prefix) :]
     return genome[:1].upper() + genome[1:]
 
 

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 CONFIG_ENV_PREFIX = "SJCAB_PEAK2ANNO_DB"
-DEFAULT_INSTALL_COMPONENTS = ("anno-bed", "anno-feature", "blacklists", "cgi")
+DEFAULT_INSTALL_COMPONENTS = ("genebed", "feature", "blacklists", "cgi")
 DEFAULT_FEATURE_SPECS = (
     ("hg38", "v31"),
     ("hg19", "v31lift37"),
@@ -50,22 +50,15 @@ def load_config() -> UserConfig:
 
     db_path = values.get("db_path") or values.get("path")
     components_value = values.get("install_options") or values.get("default_install_options")
-    specs_value = (
-        values.get("install_species_versions")
-        or values.get("default_install_species_versions")
-        or values.get("species_versions")
-    )
-    if specs_value is None:
-        species_value = values.get("install_species") or values.get("default_install_species")
-        version_value = values.get("install_versions") or values.get("default_install_versions")
-        if species_value and version_value:
-            specs_value = _pair_lists(species_value, version_value)
+    species_value = values.get("install_species") or values.get("default_install_species")
+    version_value = values.get("install_versions") or values.get("default_install_versions")
+    specs_value = None
+    if species_value and version_value:
+        specs_value = _pair_lists(species_value, version_value)
     components = _parse_components(components_value)
     specs = _parse_specs(specs_value)
     stale_text = (
-        values.get("species_txt_stale_days")
-        or values.get("version_species_stale_days")
-        or values.get("version_species_txt_stale_days")
+        values.get("version_stale_days")
         or values.get("ensembl_stale_days")
         or values.get("stale_days")
     )
@@ -145,14 +138,63 @@ def _config_paths() -> Tuple[Path, ...]:
         os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))
     ).expanduser()
     xdg = xdg_root / "sjcab_peak2anno" / ".sjcab_peak2anno.rc"
-    paths = [path for path in (home, xdg) if path.is_file()]
+    _migrate_legacy_default_xdg_config(xdg)
     explicit = os.environ.get("SJCAB_PEAK2ANNO_CONFIG")
+    paths = [path for path in (home, xdg) if path.is_file()]
     if explicit:
         explicit_path = Path(explicit).expanduser()
         if explicit_path.is_file():
             paths.append(explicit_path)
+    if not paths:
+        _create_default_xdg_config(xdg)
+        if xdg.is_file():
+            paths.append(xdg)
     # An explicitly selected file is the highest-precedence RC file.
     return tuple(paths)
+
+
+def _create_default_xdg_config(path: Path) -> None:
+    """Create the default XDG RC file when no user RC file exists."""
+
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            """# sjcab_peak2anno_db configuration.
+# Uncomment or edit values as needed.
+# SJCAB_PEAK2ANNO_DB_INSTALL_OPTIONS=genebed,feature,blacklists,cgi
+# SJCAB_PEAK2ANNO_DB_INSTALL_SPECIES=hg38,hg19,mm10,mm39
+# SJCAB_PEAK2ANNO_DB_INSTALL_VERSIONS=v31,v31lift37,vM22,vM39
+# SJCAB_PEAK2ANNO_DB_VERSION_STALE_DAYS=90
+# SJCAB_PEAK2ANNO_DB_SIZESCLEAN=1
+# SJCAB_PEAK2ANNO_DB_CLEANCACHE=90
+""",
+            encoding="utf-8",
+        )
+    except OSError:
+        # Configuration should remain usable on read-only or restricted homes.
+        return
+
+
+def _migrate_legacy_default_xdg_config(path: Path) -> None:
+    """Comment settings from the previously generated active template."""
+
+    if not path.is_file():
+        return
+    defaults = {
+        "SJCAB_PEAK2ANNO_DB_INSTALL_OPTIONS=genebed,feature,blacklists,cgi",
+        "SJCAB_PEAK2ANNO_DB_INSTALL_SPECIES=hg38,hg19,mm10,mm39",
+        "SJCAB_PEAK2ANNO_DB_INSTALL_VERSIONS=v31,v31lift37,vM22,vM39",
+        "SJCAB_PEAK2ANNO_DB_VERSION_STALE_DAYS=90",
+        "SJCAB_PEAK2ANNO_DB_SIZESCLEAN=1",
+        "SJCAB_PEAK2ANNO_DB_CLEANCACHE=90",
+    }
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+        active = {line.strip() for line in lines if line.strip() and not line.lstrip().startswith("#")}
+        if lines and lines[0].strip() == "# sjcab_peak2anno_db configuration." and active <= defaults:
+            _create_default_xdg_config(path)
+    except OSError:
+        return
 
 
 def _read_rc(path: Path) -> Dict[str, str]:
@@ -175,42 +217,89 @@ def _read_rc(path: Path) -> Dict[str, str]:
 def _parse_components(value: Optional[str]) -> Tuple[str, ...]:
     if not value:
         return DEFAULT_INSTALL_COMPONENTS
-    aliases = {"bed": "anno-bed", "feature": "anno-feature"}
     components = []
     for item in value.replace(";", ",").split(","):
         component = item.strip().lower()
         if component:
-            components.append(aliases.get(component, component))
+            components.append(component)
     return tuple(components) or DEFAULT_INSTALL_COMPONENTS
+
+
+def parse_species_version_values(
+    species_value: str,
+    version_value: Optional[str] = None,
+) -> Tuple[Tuple[str, Optional[str]], ...]:
+    """Expand species/version values and pair or broadcast them.
+
+    Values may be comma-separated or point to ``.lst``/``.list`` files. A
+    two-column file, or a species value containing ``species:version``,
+    supplies explicit pairs.
+    """
+
+    species_items, species_pairs = _choice_entries(species_value)
+    version_items, version_pairs = _choice_entries(version_value)
+    if species_pairs and (version_value or version_pairs):
+        raise ValueError("Species:version pairs cannot be combined with a version list.")
+    if version_pairs:
+        if species_items:
+            raise ValueError("A two-column version list cannot be combined with species.")
+        return tuple(version_pairs)
+    if species_pairs:
+        return tuple(species_pairs)
+    if not species_items:
+        return tuple()
+    if not version_items:
+        return tuple((species, None) for species in species_items)
+    if len(species_items) == 1:
+        return tuple((species_items[0], version) for version in version_items)
+    if len(version_items) == 1:
+        return tuple((species, version_items[0]) for species in species_items)
+    if len(species_items) == len(version_items):
+        return tuple(zip(species_items, version_items))
+    raise ValueError(
+        "Species and version lists must have the same number of values, "
+        "or one list must contain a single value."
+    )
+
+
+def _choice_entries(value: Optional[str]):
+    if not value:
+        return [], []
+    path = Path(value).expanduser()
+    if path.suffix.lower() in (".lst", ".list") and path.is_file():
+        raw_items = [line.strip() for line in path.read_text(encoding="utf-8").splitlines()]
+    else:
+        raw_items = [item.strip() for item in value.replace(";", ",").split(",")]
+    items = []
+    pairs = []
+    for item in raw_items:
+        if not item or item.startswith(("#", ";")):
+            continue
+        fields = item.split()
+        if len(fields) >= 2:
+            pairs.append((fields[0], fields[1]))
+        elif ":" in item or "=" in item:
+            separator = ":" if ":" in item else "="
+            species, version = item.split(separator, 1)
+            if species.strip() and version.strip():
+                pairs.append((species.strip(), version.strip()))
+        else:
+            items.append(item)
+    return items, pairs
 
 
 def _parse_specs(value: Optional[str]) -> Tuple[Tuple[str, str], ...]:
     if not value:
         return DEFAULT_FEATURE_SPECS
-    specs = []
-    for item in value.replace(";", ",").split(","):
-        item = item.strip()
-        if not item:
-            continue
-        if ":" in item:
-            species, version = item.split(":", 1)
-        elif "=" in item:
-            species, version = item.split("=", 1)
-        else:
-            raise ValueError(
-                "Install species/version must use species:version: {!r}".format(item)
-            )
-        if species.strip() and version.strip():
-            specs.append((species.strip(), version.strip()))
+    specs = parse_species_version_values(value)
+    if any(version is None for _, version in specs):
+        raise ValueError("Install species/version must use species:version.")
     return tuple(specs) or DEFAULT_FEATURE_SPECS
 
 
 def _pair_lists(species_value: str, version_value: str) -> str:
-    species = _split_list(species_value)
-    versions = _split_list(version_value)
-    if len(species) != len(versions):
-        raise ValueError("Install species and version lists must have equal length.")
-    return ",".join("{}:{}".format(item, version) for item, version in zip(species, versions))
+    specs = parse_species_version_values(species_value, version_value)
+    return ",".join("{}:{}".format(species, version) for species, version in specs)
 
 
 def _split_list(value: str):

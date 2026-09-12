@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Iterable, Optional, Tuple, Union
 
 from ._download import ProgressCallback, report_progress
-from ._config import load_config
+from ._config import load_config, parse_species_version_values
 from ._derive import write_deduplong
 from ._gencode import data_species_name
 from ._external import (
@@ -37,7 +37,7 @@ from ._regions import (
 )
 from ._version import __version__
 
-INSTALL_COMPONENTS = ("anno-feature", "anno-bed", "blacklists", "cgi")
+INSTALL_COMPONENTS = ("genebed", "feature", "blacklists", "cgi")
 GENCODE_FEATURE_DIR_NAME = "feature"
 DEFAULT_GENCODE_FEATURE_SPECS = (
     ("hg38", "v31"),
@@ -59,8 +59,8 @@ def install_data(
 ) -> Path:
     """Install selected resources into the user data directory.
 
-    By default this installs ``anno-feature``, ``anno-bed``,
-    ``blacklists``, and ``cgi``. ``anno-feature`` installs the bundled gene
+    By default this installs ``genebed``, ``feature``,
+    ``blacklists``, and ``cgi``. ``feature`` installs the bundled gene
     BED files plus deduplicated longest-isoform gene BEDs.
     ``cache_dir`` controls downloaded GTF placement; ``ucsc_annotation`` and
     ``clean_cache`` are forwarded to GENCODE feature generation.
@@ -76,11 +76,11 @@ def install_data(
     target_root.mkdir(parents=True, exist_ok=True)
     report_progress(progress, "install: started")
 
-    if "anno-bed" in selected:
-        report_progress(progress, "install: installing anno-bed")
+    if "genebed" in selected:
+        report_progress(progress, "install: installing genebed")
         install_gencode_beds(target_root, overwrite=overwrite)
-        report_progress(progress, "install: anno-bed done")
-    if "anno-feature" in selected:
+        report_progress(progress, "install: genebed done")
+    if "feature" in selected:
         feature_kwargs = dict(
             overwrite=overwrite,
             progress=progress,
@@ -420,19 +420,9 @@ def _feature_install_specs(
             raise ValueError("version requires a species for install-feature.")
         return DEFAULT_GENCODE_FEATURE_SPECS
 
-    if isinstance(species, str):
-        species_values = (species,)
-    else:
-        species_values = tuple(species)
-
-    if not species_values:
-        return tuple()
-    if version is not None and len(species_values) != 1:
-        raise ValueError("version can only be used with one species.")
-
+    species_value = ",".join(species) if not isinstance(species, str) else species
     specs = []
-    for value in species_values:
-        selected_version = version
+    for value, selected_version in parse_species_version_values(species_value, version):
         if selected_version is None or str(selected_version).lower() == "all":
             selected_version = default_version(value, "gene", "all")
         specs.append((value, selected_version))

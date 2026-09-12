@@ -31,3 +31,9 @@ test:
 about:
   summary: Gene-backed peak-to-annotation BED resources for SJ/CAB workflows.
   license: MIT
+  home: https://github.com/stjudecab/sjcab_peak2anno_db
+  dev_url: https://github.com/stjudecab/sjcab_peak2anno_db
+  doc_url: https://github.com/stjudecab/sjcab_peak2anno_db/blob/main/README.md
+
+extra:
+  issue_url: https://github.com/stjudecab/sjcab_peak2anno_db/issues

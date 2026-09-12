@@ -1,4 +1,58 @@
-# Selector Examples
+# Deduplicate Selection methods:
+
+- `longcol5`: no selector is needed; select the isoform with the largest
+  numeric value in BED column 5. This is the default for `dedup-bed`.
+- `long`: no selector is needed; select the isoform with the largest `end - start`.
+- `peak`: selector is a peak BED file with peak score in column 5; the isoform
+  whose TSS +/- promoter window has the highest peak score is selected. Text
+  selectors are also accepted, for example `chr1:100-200 10`.
+- `isoID`: selector is a transcript ID list, one ID per line.
+- `isoexp`: selector is a two-column table: transcript ID, then expression.
+- `perover`: selector is a BED file, often user-filtered ChromHMM active states;
+  the isoform promoter with the highest percent overlap is selected. Text
+  selectors are also accepted, for example `chr1:100-200` or `chr1_100_200`.
+
+# Defaults and naming:
+
+- Promoter half-window for `peak` and `perover` is `2kb`; change with
+  `--promoter-bp`/`-p`.
+- Matching is inclusive by default: versioned and unversioned transcript IDs can
+  match each other, and any BED overlap counts.
+- `--exclusive` requires exact transcript ID matches for `isoID`/`isoexp` and
+  BED features fully contained inside the promoter for `peak`/`perover`.
+- Text `peak`/`perover` selectors may have a header or no header. Region strings
+  accept the common `sjcab_peak2anno` delimiters, including `:`, `-`, `_`, `/`,
+  `;`, and `,`.
+- Isoforms are grouped by gene symbol by default; use `--gene-key ensid` to
+  group by Ensembl/GENCODE gene ID.
+- Species/version lookup writes prefixes such as
+  `hg38.v31.deduppeak` or `hg38.v31.filterperover`.
+- Explicit BED input such as `my.bed` writes prefixes such as
+  `my.deduppeak` or `my.filterperover`.
+
+# Python API:
+
+```python
+import sjcab_peak2anno_db as db
+
+db.dedup_bed(
+    "peak",
+    "h3k4me3_peaks.bed",
+    output_dir="annotations",
+    species="hg38",
+    version="v31",
+)
+
+db.filter_bed(
+    "perover",
+    "active_chromhmm.bed",
+    output_dir="annotations",
+    gene_bed="annotations/bed/hg38/v31/all.gene.bed",
+    promoter_bp="2kb",
+)
+```
+
+# Deduplicate Selector Examples
 
 These examples use an all-isoform BED. BED column 4 is the gene name used to
 group transcripts. `GENE1` intentionally has two non-overlapping transcript

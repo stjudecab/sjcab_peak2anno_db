@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 from ._chromhmm import CHROMHMM_GENOMES, chromhmm_root, download_chromhmm
+from ._config import parse_species_version_values
 from ._dedup import dedup_gencode_bed, filter_gencode_bed
 from ._external import CGI_SPECIES, download_cgi, install_blacklists, install_cgi
 from ._gencode import (
@@ -77,7 +78,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     path_parser.add_argument("species", choices=SUPPORTED_SPECIES)
     path_parser.add_argument("annotation", choices=_ANNOTATION_CHOICES)
     path_parser.add_argument("version", nargs="?", default="default")
-    path_parser.add_argument("-d", "--data-dir", help="Generated annotation directory.")
+    path_parser.add_argument("-v", "--ver", dest="version_option")
+    path_parser.add_argument("-d", "--db-path", dest="data_dir", help="Generated annotation directory.")
     path_parser.add_argument(
         "-i",
         "--isoform-set",
@@ -100,6 +102,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "components",
         nargs="*",
         default=None,
+        choices=INSTALL_COMPONENTS,
         metavar="COMPONENT",
         help=(
             "Components to install. Supported: {}. Defaults to all supported "
@@ -116,7 +119,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         dest="component_options",
         help="Component to install. Can be passed more than once.",
     )
-    install_parser.add_argument("-d", "--data-dir", help="Generated annotation directory.")
+    install_parser.add_argument("-d", "--db-path", dest="data_dir", help="Generated annotation directory.")
     install_parser.add_argument(
         "--ucsc-source",
         choices=("ens", "refseq"),
@@ -152,14 +155,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "update", help="Regenerate all annotations into the configured user data directory."
     )
     update_parser.add_argument("species", nargs="?", help="Species/build to update.")
-    update_parser.add_argument("-d", "--data-dir", help="Generated annotation directory.")
+    update_parser.add_argument("-d", "--db-path", dest="data_dir", help="Generated annotation directory.")
 
     blacklist_parser = subparsers.add_parser(
         "install-blacklists",
         help="Install blacklist BEDs into the configured user data directory.",
     )
     blacklist_parser.add_argument("species_positional", nargs="?", metavar="SPECIES")
-    blacklist_parser.add_argument("-d", "--data-dir", help="Generated annotation directory.")
+    blacklist_parser.add_argument("-d", "--db-path", dest="data_dir", help="Generated annotation directory.")
     blacklist_parser.add_argument(
         "-s", "--species", nargs="+",
         help=_RESOURCE_SPECIES_HELP,
@@ -180,7 +183,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="Install packaged CGI BED files into the configured user data directory.",
     )
     install_cgi_parser.add_argument("species_positional", nargs="?", metavar="SPECIES")
-    install_cgi_parser.add_argument("-d", "--data-dir", help="Generated annotation directory.")
+    install_cgi_parser.add_argument("-d", "--db-path", dest="data_dir", help="Generated annotation directory.")
     install_cgi_parser.add_argument(
         "-s", "--species", nargs="+",
         help=_RESOURCE_SPECIES_HELP,
@@ -221,17 +224,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "-s",
         "--species",
         dest="species_option",
-        choices=_GENCODE_FEATURE_SPECIES,
-        help="Genome build to install.",
+        nargs="+",
+        help="One or more genome builds, comma-separated or from a .lst/.list file.",
     )
     feature_install_parser.add_argument(
         "-v",
+        "--ver",
         "--version",
         dest="version_option",
         help="GENCODE version to install.",
     )
     feature_install_parser.add_argument(
-        "-d", "--data-dir", help="Generated annotation directory."
+        "-d", "--db-path", dest="data_dir", help="Generated annotation directory."
     )
     feature_install_parser.add_argument(
         "-o",
@@ -250,7 +254,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="Install bundled GENCODE BEDs and derived TSS/TES files.",
     )
     bed_install_parser.add_argument("species", nargs="?", help="Species/build to install.")
-    bed_install_parser.add_argument("-d", "--data-dir", help="Generated annotation directory.")
+    bed_install_parser.add_argument("-d", "--db-path", dest="data_dir", help="Generated annotation directory.")
     bed_overwrite_group = bed_install_parser.add_mutually_exclusive_group()
     bed_overwrite_group.add_argument(
         "-n",
@@ -272,7 +276,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="Download UCSC cpgIslandExt tables and write CGI BED files.",
     )
     cgi_parser.add_argument("species_positional", nargs="?", metavar="SPECIES")
-    cgi_parser.add_argument("-d", "--data-dir", help="Generated annotation directory.")
+    cgi_parser.add_argument("-d", "--db-path", dest="data_dir", help="Generated annotation directory.")
     cgi_parser.add_argument(
         "-s",
         "--species",
@@ -304,7 +308,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     gencode_parser.add_argument(
         "version",
+        nargs="?",
+        default=None,
         help="GENCODE version, for example v31, v31lift37, or vM23.",
+    )
+    gencode_parser.add_argument(
+        "-v", "--ver", dest="version_option",
+        help="GENCODE/UCSC/Ensembl version; overrides the positional VERSION.",
     )
     gencode_parser.add_argument(
         "-o",
@@ -312,7 +322,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         default=".",
         help="Directory for generated BED files. GTFs use the database cache.",
     )
-    gencode_parser.add_argument("-d", "--data-dir", help="Database/cache directory.")
+    gencode_parser.add_argument("-d", "--db-path", dest="data_dir", help="Database/cache directory.")
     gencode_parser.add_argument("-g", "--gtf-path", help="Use an existing local GTF.")
     gencode_parser.add_argument("-u", "--url", help="Override the default GTF URL.")
     gencode_parser.add_argument(
@@ -395,7 +405,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 path(
                     args.species,
                     args.annotation,
-                    args.version,
+                    args.version_option or args.version,
                     data_dir=args.data_dir,
                     isoform_set=args.isoform_set,
                 )
@@ -527,9 +537,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             )
             return 0
         if args.command == "download-genebed":
+            version = args.version_option or args.version or "def"
             target = download_and_convert_gencode_gtf(
                 args.species,
-                args.version,
+                version,
                 args.output_dir,
                 gtf_path=args.gtf_path,
                 gtf_url=args.url,
@@ -542,7 +553,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(target)
             return 0
         if args.command == "download-feature":
-            specs = _gencode_feature_specs(args.species, args.version)
+            feature_species = args.species or args.species_option
+            if not feature_species:
+                raise ValueError("download-feature requires a species.")
+            if isinstance(feature_species, (list, tuple)):
+                feature_species = ",".join(feature_species)
+            specs = _gencode_feature_specs(
+                feature_species, args.version_option or args.version or "def"
+            )
             if args.dry_run:
                 for dry_species, dry_version in specs:
                     print(_dry_run_gtf_url(dry_species, dry_version, args.data_dir))
@@ -601,7 +619,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 output_dir=args.output_dir,
                 gene_bed=args.gene_bed,
                 species=args.species,
-                version=args.version,
+                version=args.version_option or args.version,
                 data_dir=args.data_dir,
                 promoter_bp=args.promoter_bp,
                 inclusive=not args.exclusive,
@@ -643,7 +661,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 script = write_liftover_script(
                     source_dir, output_dir, source_genome, requested_genome,
                     root / "liftover_{}_to_{}.sh".format(source_genome, requested_genome),
-                    install_root=root / requested_genome if args.command == "install-chromhmm" else None,
+                    install_root=(
+                        root / requested_genome / "{}state".format(args.model)
+                        if args.command == "install-chromhmm"
+                        else None
+                    ),
+                    cache_dir=root.parent,
                 )
                 print("liftover_script\t{}".format(script))
             return 0
@@ -719,10 +742,24 @@ def _add_gencode_feature_parser(
         help=help_text,
         epilog=_GENCODE_HELP_EPILOG,
     )
-    parser.add_argument("species", help="Genome build, for example hg38 or hg19.")
+    parser.add_argument(
+        "species",
+        nargs="?",
+        help="Genome build, comma-separated or from a .lst/.list file.",
+    )
     parser.add_argument(
         "version",
+        nargs="?",
+        default=None,
         help="GENCODE/UCSC/Ensemble version, for example v31, v31lift37, or vM23.",
+    )
+    parser.add_argument(
+        "-v", "--ver", dest="version_option",
+        help="GENCODE/UCSC/Ensembl version; overrides the positional VERSION.",
+    )
+    parser.add_argument(
+        "-s", "--species", dest="species_option", nargs="+",
+        help="One or more genome builds, comma-separated or from a .lst/.list file.",
     )
     parser.add_argument(
         "-o",
@@ -730,7 +767,7 @@ def _add_gencode_feature_parser(
         default=".",
         help="Directory for generated gene and feature BED files.",
     )
-    parser.add_argument("-d", "--data-dir", help="Database/cache directory.")
+    parser.add_argument("-d", "--db-path", dest="data_dir", help="Database/cache directory.")
     _add_feature_generation_arguments(parser, include_output_dir=False)
 
 
@@ -751,6 +788,10 @@ def _add_dedup_filter_parser(
         nargs="?",
         default="default",
         help="GENCODE/UCSC/Ensemble version to resolve. Defaults to the species default.",
+    )
+    parser.add_argument(
+        "-v", "--ver", dest="version_option",
+        help="GENCODE/UCSC/Ensembl version; overrides the positional VERSION.",
     )
     parser.add_argument(
         "-b",
@@ -776,7 +817,8 @@ def _add_dedup_filter_parser(
     )
     parser.add_argument(
         "-d",
-        "--data-dir",
+        "--db-path",
+        dest="data_dir",
         help="Generated annotation directory for species/version lookup.",
     )
     parser.add_argument(
@@ -935,7 +977,7 @@ def _add_chromhmm_parser(
         )
     else:
         parser.add_argument(
-            "-d", "--data-dir", help="Generated annotation directory."
+            "-d", "--db-path", dest="data_dir", help="Generated annotation directory."
         )
     parser.add_argument(
         "-m",
@@ -1003,7 +1045,7 @@ def _add_segway_parser(
         )
     else:
         parser.add_argument(
-            "-d", "--data-dir", help="Generated annotation directory."
+            "-d", "--db-path", dest="data_dir", help="Generated annotation directory."
         )
     parser.add_argument(
         "-s", "--species", dest="genome", metavar="SPECIES", default="hg19",
@@ -1117,6 +1159,7 @@ def _write_external_liftover_scripts(
             source_dir / "liftover_hg38_to_{}.sh".format(target_genome),
             install_root=source_dir,
             rename_genome_prefix=resource_name in {"blacklists", "cgi"},
+            cache_dir=source_dir.parent,
         )
         print("liftover_script\t{}".format(script))
 
@@ -1152,7 +1195,9 @@ def _gencode_feature_install_scope(args: argparse.Namespace) -> tuple:
             "install-feature requires species, or --all."
         )
     if version is None:
-        version = "def"
+        species_text = ",".join(species) if isinstance(species, (list, tuple)) else species
+        parsed = parse_species_version_values(species_text)
+        version = None if any(item_version is not None for _, item_version in parsed) else "def"
     return species, version
 
 
@@ -1197,14 +1242,18 @@ def _dry_run_gtf_url(species: str, version: str, cache_dir: Optional[str]) -> st
             return candidates[selected - 1][1]
 
 
-def _gencode_feature_specs(species: str, version: str) -> tuple:
-    if species.lower() == "all":
-        if version.lower() != "all":
-            raise ValueError("download-feature all requires version all.")
+def _gencode_feature_specs(species: str, version: Optional[str]) -> tuple:
+    if species.lower() == "all" and (version or "all").lower() == "all":
         return DEFAULT_GENCODE_FEATURE_SPECS
-    if version.lower() == "all":
-        return ((species, _gencode_default_feature_version(species)),)
-    return ((species, version),)
+    if species.lower() == "all":
+        raise ValueError("download-feature all requires version all.")
+    specs = parse_species_version_values(species, version)
+    selected = []
+    for feature_species, feature_version in specs:
+        if feature_version is None or feature_version.lower() == "all":
+            feature_version = _gencode_default_feature_version(feature_species)
+        selected.append((feature_species, feature_version))
+    return tuple(selected)
 
 
 def _gencode_default_feature_version(species: str) -> str:

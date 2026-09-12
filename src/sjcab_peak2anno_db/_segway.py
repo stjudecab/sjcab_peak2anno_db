@@ -13,6 +13,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from ._download import ProgressCallback, download_file, report_progress
 from ._download_log import record_download_url
+from ._liftover import _ucsc_token
 from ._registry import UnknownResourceError, user_data_dir
 
 PathLike = Union[str, Path]
@@ -280,12 +281,14 @@ def segway_liftover_script(
     target_genome: str,
     env_name: str = "segway-liftover",
     install_root: Optional[PathLike] = None,
+    cache_dir: Optional[PathLike] = None,
 ) -> str:
     """Return a bash script that lifts local hg19 Segway BEDs to another genome."""
 
     target = _normalize_target_genome(target_genome)
     chain_name = "hg19To{}.over.chain.gz".format(_ucsc_target_token(target))
     chain_url = urllib.parse.urljoin(SEGWAY_CHAIN_ROOT_URL, chain_name)
+    chain_cache_dir = user_data_dir(cache_dir) / "cache" / "chains"
     install_root_text = (
         _shell_quote(str(Path(install_root).expanduser()))
         if install_root is not None
@@ -298,11 +301,13 @@ ENV_NAME={env_name}
 INPUT_DIR={input_dir}
 OUTPUT_DIR={output_dir}
 INSTALL_ROOT={install_root}
-CHAIN_DIR="${{OUTPUT_DIR}}/chains"
+CHAIN_DIR={chain_dir}
 CHAIN="${{CHAIN_DIR}}/{chain_name}"
 
 mkdir -p "${{CHAIN_DIR}}" "${{OUTPUT_DIR}}"
-curl -L "{chain_url}" -o "${{CHAIN}}"
+if [ ! -s "${{CHAIN}}" ]; then
+  curl -L "{chain_url}" -o "${{CHAIN}}"
+fi
 
 activate_existing_env() {{
   if command -v micromamba >/dev/null 2>&1; then
@@ -380,17 +385,20 @@ for bed in "${{INPUT_DIR}}"/*.bed.gz "${{INPUT_DIR}}"/interpreted/*.bed.gz; do
   fi
   mkdir -p "$(dirname "${{out}}")"
   "${{CROSSMAP[@]}}" bed "${{CHAIN}}" "${{bed}}" "${{out}}"
+  [ -e "${{out}}.unmap" ] || : > "${{out}}.unmap"
   gzip -f "${{out}}"
 done
 
 if [ -n "${{INSTALL_ROOT}}" ]; then
   INSTALL_DIR="${{INSTALL_ROOT}}/{target}"
   mkdir -p "${{INSTALL_DIR}}"
-  for lifted in "${{OUTPUT_DIR}}"/*.bed.gz; do
+  for lifted in "${{OUTPUT_DIR}}"/*.bed.gz "${{OUTPUT_DIR}}"/*.unmap; do
     [ -e "${{lifted}}" ] || continue
     rel="$(basename "${{lifted}}")"
     cp -p "${{lifted}}" "${{INSTALL_DIR}}/${{rel}}"
   done
+  rm -rf "${{OUTPUT_DIR}}"
+  rmdir "$(dirname "${{OUTPUT_DIR}}")" 2>/dev/null || true
   echo "Lifted Segway files are organized under ${{INSTALL_DIR}}" >&2
 else
   echo "Lifted Segway files are organized under ${{OUTPUT_DIR}}" >&2
@@ -398,6 +406,7 @@ fi
 """.format(
         chain_name=chain_name,
         chain_url=chain_url,
+        chain_dir=_shell_quote(str(chain_cache_dir)),
         env_name=_shell_quote(env_name),
         input_dir=_shell_quote(str(Path(input_dir).expanduser())),
         install_root=install_root_text,
@@ -428,6 +437,7 @@ def write_segway_liftover_script(
         output_dir,
         target,
         install_root=install_root,
+        cache_dir=data_dir,
     )
     output = Path(script_path).expanduser()
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -1455,7 +1465,7 @@ def _normalize_target_genome(genome: str) -> str:
 
 
 def _ucsc_target_token(genome: str) -> str:
-    return genome[:1].upper() + genome[1:]
+    return _ucsc_token(genome)
 
 
 def _normalize_names(

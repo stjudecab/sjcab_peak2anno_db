@@ -429,9 +429,9 @@ def test_install_accepts_component_names(monkeypatch, tmp_path):
         cli.main(
             [
                 "install",
-                "anno-bed",
+                "genebed",
                 "cgi",
-                "--data-dir",
+                "--db-path",
                 str(tmp_path),
                 "--no-overwrite",
                 "--ucsc-source",
@@ -444,7 +444,7 @@ def test_install_accepts_component_names(monkeypatch, tmp_path):
     assert called == {
         "data_dir": str(tmp_path),
         "overwrite": False,
-        "components": ["anno-bed", "cgi"],
+        "components": ["genebed", "cgi"],
         "progress": cli._stderr_progress,
         "cache_dir": str(tmp_path),
         "ucsc_annotation": "refseq",
@@ -550,7 +550,7 @@ def test_install_accepts_short_component_options(monkeypatch, tmp_path):
             [
                 "install",
                 "-c",
-                "anno-bed",
+                "genebed",
                 "-c",
                 "cgi",
                 "-d",
@@ -563,7 +563,7 @@ def test_install_accepts_short_component_options(monkeypatch, tmp_path):
     assert called == {
         "data_dir": str(tmp_path),
         "overwrite": False,
-        "components": ["anno-bed", "cgi"],
+        "components": ["genebed", "cgi"],
         "progress": cli._stderr_progress,
         "cache_dir": str(tmp_path),
         "ucsc_annotation": "ens",
@@ -575,11 +575,11 @@ def test_install_data_default_installs_expected_components(monkeypatch, tmp_path
     calls = []
 
     def fake_gencode_beds(data_dir=None, overwrite=True):
-        calls.append(("anno-bed", data_dir, overwrite))
+        calls.append(("genebed", data_dir, overwrite))
         return tmp_path
 
     def fake_gencode_features(data_dir=None, overwrite=True, progress=None, **kwargs):
-        calls.append(("anno-feature", data_dir, overwrite))
+        calls.append(("feature", data_dir, overwrite))
         return tmp_path
 
     def fake_blacklists(data_dir=None, overwrite=True):
@@ -601,8 +601,8 @@ def test_install_data_default_installs_expected_components(monkeypatch, tmp_path
 
     assert install.install_data(data_dir=tmp_path, overwrite=False) == tmp_path
     assert calls == [
-        ("anno-bed", tmp_path, False),
-        ("anno-feature", tmp_path, False),
+        ("genebed", tmp_path, False),
+        ("feature", tmp_path, False),
         ("blacklists", tmp_path, False),
         ("cgi", tmp_path, False),
         ("manifest", tmp_path, None),

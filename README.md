@@ -2,50 +2,65 @@
 
 Gene-backed peak-to-annotation BED resources for SJ/CAB workflows.
 
-The package installs bundled resources and can also download or regenerate
-GENCODE, Roadmap ChromHMM, blacklist, and CpG island BED files. Generated user
-data defaults to `~/.sjcab_peak2anno_db`; override it with
-`SJCAB_PEAK2ANNO_DB_PATH` or with command-level `--data-dir`/`-d` flags.
+The package installs bundled resources and can also download/generate
+from GENCODE/UCSC/Ensembl gtf, Roadmap ChromHMM, blacklist, and CpG island
+BED files. Generated user data defaults to `~/.sjcab_peak2anno_db`,
+override it with `SJCAB_PEAK2ANNO_DB_PATH` 
+or with command-level `--db-path`/`-d` flags.
 
 ```bash
 # Install the package and its default resource set.
 pip install sjcab_peak2anno_db
+conda install stjudecab::sjcab_peak2anno_db
 
-export SJCAB_PEAK2ANNO_DB_PATH=/path/to/sjcab_peak2anno_db
-sjcab-peak2anno-db install
-sjcab-peak2anno-db install anno-bed anno-feature
-sjcab-peak2anno-db install --overwrite
-sjcab-peak2anno-db list
+export SJCAB_PEAK2ANNO_DB_PATH=~/.sjcab_peak2anno_db
+sjcab-peak2anno-db install # install default for "genebed feature blacklists cgi"
+sjcab-peak2anno-db install genebed feature # install selected default group
+sjcab-peak2anno-db list # list default bundle
+
+sjcab-peak2anno-db download-genebed hg38 v31 -o annotations # download Gencode hg38 v31 genebeds to annotation folder
+sjcab-peak2anno-db install-genebed hg19 v31lift37 # install Gencode hg19 v31lift37 to --db-path
+sjcab-peak2anno-db download-feature mm10 vM22 -g gencode.vM22.annotation.gtf.gz -o annotations # convert own gtf file to genebed and features
+sjcab-peak2anno-db install-feature cat 116 # install genebed/feature for cat ensemble release 116
+sjcab-peak2anno-db install-feature equcab2 # install genebed/feature for horse UCSC version equCab2
+sjcab-peak2anno-db install-feature zea_mays # install genebed/feature for corn ensemble current release(empty/def/default/current/latest are the same)
 ```
 
-Supported bundled gene species are `hg19`, `hg38`, `mm10`, `mm9`, `mm39`, and
-`sacCer3`. CGI resources are available for `hg38`, `hg19`, `mm10`, `mm9`, and
-`mm39`.
+Supported bundled genebed species are `hg19`, `hg38`, `mm10`, `mm9`,
+`mm39`(Gencode) and `sacCer3`. All other genebed/feature for species/version would auto found gtf from Gencode/UCSC/Ensemble and automatic generate.
+CGI: `hg38`, `hg19`, `mm10`, `mm9`, and `mm39`
+blacklists: [readme.md](https://github.com/stjudecab/sjcab_peak2anno_db/tree/main/src/sjcab_peak2anno_db/data/blacklists)
 
-Every command that downloads a file appends the source URL to
-`{data_dir}/download_urls.log`. Long-running install/download commands print
-progress to stderr; stdout is reserved for generated paths and command results.
+All download first checks the db-path/cache folder(> output directory > working directory) before downloading. Every downloaded file appends the source URL to `{db-path}/download_urls.log`
 
 ## Command conventions and common options
 
-The only general difference between command pairs is the destination:
+The general difference between command pairs is the destination:
 
 - `install-*`: install or generate resources under the configured `db_path`
   directory.
-- `download-*`: write downloaded/generated resources under `--output-dir` (or
-  the command's output default).
+- `download-*`: write downloaded/generated resources under `--output-dir` (default workdir).
+- `*-feature`: would install/download both genebed and feature
+- `blacklists|cgi|chromhmm|segway`: if there isn't available resource for selected
+  species from UCSC, liftover script can be provided based on chain file from UCSC.
 
 Common option styles:
 
-- `-s`, `--species SPECIES`: select a species or genome build. Commands that
-  take a species as their first positional argument also accept this form when
-  supported.
-- `VERSION`: select a release/version, such as `v31`, `vM39`, `def`, or
-  `latest`, where supported.
-- `-d`, `--data-dir DIR`: override the database/cache directory for commands
+- `SPECIES`, `-s`, `--species SPECIES`: select a species or genome build. 
+  It would match exact by Gencode > UCSC > Ensemble, if no exact match, will 
+  print the matches from Ensembl(assembly > latin name > common name) for you 
+  to copy and rerun with.
+- `VERSION`, `-v`, `--ver VERSION`: select a release/version, such as `v31`,
+  `vM39`, `empty|def|default|current|latest`, where supported. The option form can replace
+- `species1:version1,species2:version2`: Species and versions accept comma-separated values 
+  or a `.lst`/`.list` file with one choice per row. A two-column list supplies 
+  `species version` pairs; `species:version` values are also accepted. 
+  A single species or version is broadcast across the other list, while equal-length 
+  lists are paired in order.
+- `-d`, `--db-path DIR`: override the database/cache directory for commands
   that read or install the database.
 - `-o`, `--output-dir DIR`: select a staging/output directory for download
-  commands.
+  commands. Default for `download-*` use working directory as default.
 - `-n`, `--no-overwrite`: preserve existing files. `--overwrite` rewrites them
   where supported.
 - `--clean-cache [DAYS]`: remove cache files older than `DAYS` after BED
@@ -53,7 +68,7 @@ Common option styles:
   current cached GTF immediately, and negative values have the same immediate
   cleanup behavior.
 - `--sizes-clean [0|1]`: create `.sizes.clean` files by default. Use
-  `--sizes-clean 0` to disable them.
+  `--sizes-clean 0` to disable them. 
 - `-g`, `--gtf-path FILE`: use an existing local GTF instead of downloading
   one.
 - `-u`, `--url URL`: override the resolved GTF URL.
@@ -64,7 +79,9 @@ Common option styles:
 
 ## User configuration
 
-Optional RC files are read from `~/.sjcab_peak2anno.rc` and
+If no RC file exists, the default XDG RC template is created automatically;
+all settings in the generated template are commented out.
+RC files are read from `~/.sjcab_peak2anno.rc` and
 `$XDG_CONFIG_HOME/sjcab_peak2anno/.sjcab_peak2anno.rc` (the XDG file takes
 precedence). Set `SJCAB_PEAK2ANNO_CONFIG` to add a specific RC file; that file
 has the highest RC precedence. Explicit command-line arguments take precedence
@@ -74,10 +91,11 @@ over configuration; environment variables beginning with
 Example:
 
 ```text
-SJCAB_PEAK2ANNO_DB_PATH=/path/to/sjcab_peak2anno_db
-SJCAB_PEAK2ANNO_DB_INSTALL_OPTIONS=bed,feature,blacklists,cgi
-SJCAB_PEAK2ANNO_DB_INSTALL_SPECIES_VERSIONS=hg38:v31,hg19:v31lift37,mm39:vM39
-SJCAB_PEAK2ANNO_DB_SPECIES_TXT_STALE_DAYS=90
+SJCAB_PEAK2ANNO_DB_PATH=~/.sjcab_peak2anno_db
+SJCAB_PEAK2ANNO_DB_INSTALL_OPTIONS=genebed,feature,blacklists,cgi
+SJCAB_PEAK2ANNO_DB_INSTALL_SPECIES=hg38,hg19,mm10,mm39
+SJCAB_PEAK2ANNO_DB_INSTALL_VERSIONS=v31,v31lift37,vM22,vM39
+SJCAB_PEAK2ANNO_DB_VERSION_STALE_DAYS=90
 SJCAB_PEAK2ANNO_DB_SIZESCLEAN=1
 SJCAB_PEAK2ANNO_DB_CLEANCACHE=90
 ```
@@ -85,14 +103,12 @@ SJCAB_PEAK2ANNO_DB_CLEANCACHE=90
 RC keys use the same names as the environment variables; the
 `SJCAB_PEAK2ANNO_DB_` prefix is optional for backwards-compatible short keys.
 `SJCAB_PEAK2ANNO_DB_PATH` sets the default data directory. `INSTALL_OPTIONS`
-accepts `bed`,
-`feature`, `blacklists`, and `cgi` (or their component names
-`anno-bed`/`anno-feature`). `INSTALL_SPECIES_VERSIONS` controls the default
-species/version pairs used by the feature installer. Species and versions may
-also be supplied separately with `SJCAB_PEAK2ANNO_DB_INSTALL_SPECIES` and
-`SJCAB_PEAK2ANNO_DB_INSTALL_VERSIONS`.
+accepts `genebed`, `feature`, `blacklists`, and `cgi`.
+`INSTALL_SPECIES` and `INSTALL_VERSIONS` control the default species/version
+pairs used by the feature installer. They accept comma-separated values or
+`.lst`/`.list` files, with single-value broadcasting and equal-length pairing.
 
-`SPECIES_TXT_STALE_DAYS` controls refresh of the Ensembl `VERSION`,
+`VERSION_STALE_DAYS` controls refresh of the Ensembl `VERSION`,
 `species_EnsemblVertebrates.txt`, and `species.txt` catalogs. `SIZESCLEAN=1`
 creates `.sizes.clean` files by default; set it to `0` to disable them. The
 `--sizes-clean 0` option is available on feature-generation and `install`
@@ -102,9 +118,9 @@ after BED generation. A negative value removes the newly used cached GTF
 immediately. The command-line form is `--clean-cache [DAYS]`; using
 `--clean-cache` without a value means immediate cleanup.
 
-## Annotation Bed
+## Genebed
 
-Annotation BED resources provide transcript-level gene annotations. Two isoform
+GeneBED resources provide transcript-level gene annotations. Two isoform
 sets are generated:
 
 - `all`: all transcript isoforms.
@@ -118,75 +134,52 @@ species, not necessarily the newest parsed GENCODE release.
 ```bash
 # Install or regenerate annotation BED resources.
 sjcab-peak2anno-db install-genebed
-sjcab-peak2anno-db install-genebed -d /path/to/sjcab_peak2anno_db
-sjcab-peak2anno-db install-genebed --overwrite
 
+sjcab-peak2anno-db install-genebed mm10 vM22 -g gencode.vM22.annotation.gtf.gz
+sjcab-peak2anno-db install-genebed cat
+sjcab-peak2anno-db install-genebed dog 100
 sjcab-peak2anno-db download-genebed hg38 v31 -o annotations
 sjcab-peak2anno-db download-genebed hg19 v31lift37 -o annotations
-sjcab-peak2anno-db download-genebed mm10 vM22 -g gencode.vM22.annotation.gtf.gz -o annotations
-sjcab-peak2anno-db download-genebed human 100
-sjcab-peak2anno-db download-genebed human def
 ```
-
-`download-genebed` downloads or reuses the expected GTF. It first checks the
-`cache` cache, then the output directory and current working directory,
-before downloading. Use `--gtf-path`/`-g` to force a specific local GTF or
-`--url`/`-u` to use a custom URL. Species not covered by the bundled GENCODE
-registry automatically try a matching UCSC short genome ID, then Ensembl
-Vertebrates, then Ensembl Genomes. Its version is the Ensembl release number
-(`100`, for example), or `def` for the latest GTF listed by Ensembl. The same
-automatic source selection is used by `download-feature`.
-
-`-o/--output-dir` defaults to the current working directory; it is not required.
-Downloaded GTFs are stored in `{data_dir}/cache/`, where `{data_dir}` is
-`--data-dir`, `SJCAB_PEAK2ANNO_DB_PATH`, or `~/.sjcab_peak2anno_db`. Use
-`--clean-cache [DAYS]` to remove cache files older than `DAYS` after BED files
-have been generated; use a negative value to remove the current cached GTF
-immediately.
-Known Ensembl chromosome sizes are bundled with the package. UCSC sizes are
-bundled for the latest two assemblies per species when available. Runtime
-copies are cached in `{data_dir}/sizes/{species}.sizes`; the corresponding
-`{species}.sizes.clean` is generated locally and contains only `chr1`-`chr22`,
-`chrX`, `chrY`, and `chrM` (or the equivalent unprefixed names).
-The packaged `data/gtf_builds.tsv` is copied to
-`{data_dir}/ucsc/gtf_builds.tsv`; when that runtime copy is older than six
-months, it is refreshed from the UCSC downloads page and newly listed builds
-get both runtime size files from their `bigZips/{build}.chrom.sizes` URL.
 
 For Ensembl releases, `def`, `default`, `current`, and `latest` resolve the
 current release metadata. The separate links are
-`{data_dir}/ensembl/vertebrates/def -> {release}` and
-`{data_dir}/ensembl/genomes/def -> {release}`. Ensembl Genomes determines its
+`{db-path}/ensembl/vertebrates/def -> {release}` and
+`{db-path}/ensembl/genomes/def -> {release}`. Ensembl Genomes determines its
 current release from `https://ftp.ebi.ac.uk/pub/ensemblgenomes/VERSION`.
 
 For a species not built into the resolver, the command checks separate cached
-catalogs under `{data_dir}/ensembl/vertebrates/{release}/` and
-`{data_dir}/ensembl/genomes/{release}/`, downloading the missing catalog only when
+catalogs under `{db-path}/ensembl/vertebrates/{release}/` and
+`{db-path}/ensembl/genomes/{release}/`, downloading the missing catalog only when
 needed. The `def` directory links to the current release. Each catalog stores
 `assembly`, `species`, `division`, `name`, and
-`assembly_accession` in that order; column 1 can be passed back as the species
-ID. A
-release-specific reduced catalog is stored at
-`{data_dir}/ensembl/vertebrates/{release}/` or
-`{data_dir}/ensembl/genomes/{release}/`; each catalog's `def` link points to
+`assembly_accession` in that order; `assembly` or `species` or `assembly_accession`
+can be passed back as the species ID as long as they are unique.
+A release-specific reduced catalog is stored at
+`{db-path}/ensembl/vertebrates/{release}/` or
+`{db-path}/ensembl/genomes/{release}/`; each catalog's `def` link points to
 its own release directory.
 
 For automatic GTF selection, the order is GENCODE, a recognized UCSC build
-with a UCSC GTF, Ensembl Vertebrates, then Ensembl Genomes. UCSC build IDs are
-cached in `{data_dir}/ucsc/gtf_builds.tsv` after reading the
-[UCSC downloads page](https://hgdownload.soe.ucsc.edu/downloads.html); an
-unrecognized build is never sent directly to a UCSC genes directory.
+with a UCSC GTF, Ensembl Vertebrates, then Ensembl Genomes. UCSC build IDs and
+liftOver chain file URL are cached in `{db-path}/ucsc/gtf_builds.tsv` after reading the
+[UCSC downloads page](https://hgdownload.soe.ucsc.edu/downloads.html) and [liftOver](https://hgdownload.soe.ucsc.edu/goldenPath/hg38/liftOver/) 
+would refresh if older than `VERSION_STALE_DAYS`.
+
+`{species}.sizes` for UCSC were based on `bigZips/{build}.chrom.sizes`, otherwise based on ensembl assembly report.
+`{species}.sizes.clean` is based on ensembl assembly report only kept primary chromosomes
+All generated liftOver scripts store chain files in `{db-path}/cache/chains/` and
+reuse an existing non-empty chain file.
 
 Default layout:
 
 ```text
-{data_dir}/bed/{species}/{version}/all.gene.bed
-{data_dir}/bed/{species}/{version}/deduplong.gene.bed
-{data_dir}/bed/{species}/def -> {version}
+{db-path}/bed/{species}/{version}/all.gene.bed
+{db-path}/bed/{species}/{version}/deduplong.gene.bed
+{db-path}/bed/{species}/def -> {version}
+{db-path}/sizes/{species}.sizes
+{db-path}/sizes/{species}.sizes.clean
 ```
-
-TSS and TES BED files are not stored by install/download layouts; derive them
-from the selected gene BED with `write_tss` or `write_tes` when needed.
 
 Python API:
 
@@ -204,16 +197,17 @@ db.write_deduplong("all.gene.bed", "deduplong.gene.bed")
 Both commands select one isoform per gene from an all-isoform GENCODE BED and
 write `{prefix}.gene.bed`, `{prefix}.tss.bed`, and `{prefix}.tes.bed`.
 
+`dedup-bed` falls back to the longest isoform for genes without selector
+support (each gene from original would have at least one transcript).
+`filter-bed` uses the same selector logic but omits genes without selector
+ support (could remove a lot genes without supports).
+
 The default `dedup-bed` selector is `longcol5`: it selects the isoform
 with the largest numeric BED column 5. Use `long` to select by interval length
 (`end - start`):
 
-`dedup-bed` falls back to the longest isoform for genes without selector
-support. `filter-bed` uses the same selector logic but omits genes
-without selector support.
-
 Detailed selector input examples, including input and output BED content, are in
-[README.SELECTOR.md](README.SELECTOR.md).
+[README.DEDUP.md](https://github.com/stjudecab/sjcab_peak2anno_db/blob/main/README.DEDUP.md).
 
 ```bash
 # Select one transcript per gene using the default column-5 selector.
@@ -230,7 +224,7 @@ sjcab-peak2anno-db filter-bed -b annotations/bed/hg38/v31/all.gene.bed -m perove
 sjcab-peak2anno-db filter-bed hg38 v31 -m isoexp -i isoform_expression.tsv --exclusive -o annotations
 ```
 
-Selection methods:
+Deduplicate Selector methods:
 
 - `longcol5`: no selector is needed; select the isoform with the largest
   numeric value in BED column 5. This is the default for `dedup-bed`.
@@ -244,45 +238,6 @@ Selection methods:
   the isoform promoter with the highest percent overlap is selected. Text
   selectors are also accepted, for example `chr1:100-200` or `chr1_100_200`.
 
-Defaults and naming:
-
-- Promoter half-window for `peak` and `perover` is `2kb`; change with
-  `--promoter-bp`/`-p`.
-- Matching is inclusive by default: versioned and unversioned transcript IDs can
-  match each other, and any BED overlap counts.
-- `--exclusive` requires exact transcript ID matches for `isoID`/`isoexp` and
-  BED features fully contained inside the promoter for `peak`/`perover`.
-- Text `peak`/`perover` selectors may have a header or no header. Region strings
-  accept the common `sjcab_peak2anno` delimiters, including `:`, `-`, `_`, `/`,
-  `;`, and `,`.
-- Isoforms are grouped by gene symbol by default; use `--gene-key ensid` to
-  group by Ensembl/GENCODE gene ID.
-- Species/version lookup writes prefixes such as
-  `hg38.v31.deduppeak` or `hg38.v31.filterperover`.
-- Explicit BED input such as `my.bed` writes prefixes such as
-  `my.deduppeak` or `my.filterperover`.
-
-Python API:
-
-```python
-import sjcab_peak2anno_db as db
-
-db.dedup_bed(
-    "peak",
-    "h3k4me3_peaks.bed",
-    output_dir="annotations",
-    species="hg38",
-    version="v31",
-)
-
-db.filter_bed(
-    "perover",
-    "active_chromhmm.bed",
-    output_dir="annotations",
-    gene_bed="annotations/bed/hg38/v31/all.gene.bed",
-    promoter_bp="2kb",
-)
-```
 
 ### `path`
 
@@ -355,16 +310,16 @@ Ensembl Vertebrates and Ensembl Genomes. See the
 Default installed layout:
 
 ```text
-{data_dir}/feature/{species}/{version}/{prefix}/{prefix}.promoter.up.bed
-{data_dir}/feature/{species}/{version}/{prefix}/{prefix}.promoter.down.bed
-{data_dir}/feature/{species}/{version}/{prefix}/{prefix}.exon.bed
-{data_dir}/feature/{species}/{version}/{prefix}/{prefix}.intron.bed
-{data_dir}/feature/{species}/{version}/{prefix}/{prefix}.tes.bed
-{data_dir}/feature/{species}/{version}/{prefix}/{prefix}.dis5.bed
-{data_dir}/feature/{species}/{version}/{prefix}/{prefix}.dis3.bed
-{data_dir}/feature/{species}/{version}/{prefix}/{prefix}.intergenic.bed
-{data_dir}/feature/{species}/{version}/{prefix}/order.lst
-{data_dir}/feature/{species}/def -> {version}/{prefix}
+{db-path}/feature/{species}/{version}/{prefix}/{prefix}.promoter.up.bed
+{db-path}/feature/{species}/{version}/{prefix}/{prefix}.promoter.down.bed
+{db-path}/feature/{species}/{version}/{prefix}/{prefix}.exon.bed
+{db-path}/feature/{species}/{version}/{prefix}/{prefix}.intron.bed
+{db-path}/feature/{species}/{version}/{prefix}/{prefix}.tes.bed
+{db-path}/feature/{species}/{version}/{prefix}/{prefix}.dis5.bed
+{db-path}/feature/{species}/{version}/{prefix}/{prefix}.dis3.bed
+{db-path}/feature/{species}/{version}/{prefix}/{prefix}.intergenic.bed
+{db-path}/feature/{species}/{version}/{prefix}/order.lst
+{db-path}/feature/{species}/def -> {version}/{prefix}
 ```
 
 `order.lst` contains:
@@ -431,8 +386,8 @@ fuzzy tissue/group text (`--tissue`/`-t`), or fuzzy sample/cell-line text
 Output layout:
 
 ```text
-{data_dir}/chromhmm/{genome}/{model}state/{epigenome_id}_{model}_{model_label}_dense.bed.gz
-{data_dir}/chromhmm/metadata.tsv
+{db-path}/chromhmm/{genome}/{model}state/{epigenome_id}_{model}_{model_label}_dense.bed.gz
+{db-path}/chromhmm/metadata.tsv
 ```
 
 `metadata.tsv` includes the downloaded path, genome (`hg19` or `hg38`), state
@@ -495,18 +450,18 @@ directory.
 Output layout:
 
 ```text
-{data_dir}/segway/hg19/segway_encyclopedia.bed.gz
-{data_dir}/segway/hg19/caas.bed.gz
-{data_dir}/segway/hg19/label_info.tab
-{data_dir}/segway/hg19/{sample}.bed.gz
-{data_dir}/segway/metadata.tsv
-{data_dir}/segway/liftover_hg19_to_{genome}.sh
+{db-path}/segway/hg19/segway_encyclopedia.bed.gz
+{db-path}/segway/hg19/caas.bed.gz
+{db-path}/segway/hg19/label_info.tab
+{db-path}/segway/hg19/{sample}.bed.gz
+{db-path}/segway/metadata.tsv
+{db-path}/segway/liftover_hg19_to_{genome}.sh
 ```
 
 Lifted BED files include `lift` in the genome suffix, for example:
 
 ```text
-{data_dir}/segway/hg38/PERIPHERAL_BLOOD_MONONUCLEAR_PRIMARY_CELLS.hg38lift.bed.gz
+{db-path}/segway/hg38/PERIPHERAL_BLOOD_MONONUCLEAR_PRIMARY_CELLS.hg38lift.bed.gz
 ```
 
 Python API:
@@ -537,8 +492,8 @@ sjcab-peak2anno-db install blacklists
 Output layout:
 
 ```text
-{data_dir}/blacklists/{name}.bed.20230411
-{data_dir}/blacklists/{name}.bed
+{db-path}/blacklists/{name}.bed.20230411
+{db-path}/blacklists/{name}.bed
 ```
 
 The current `{name}.bed` path is refreshed as a symlink when supported by the
@@ -568,7 +523,7 @@ sjcab-peak2anno-db download-cgi -d cgi_downloads --species hg38
 Output layout:
 
 ```text
-{data_dir}/cgi/{species}_cgi.bed
+{db-path}/cgi/{species}_cgi.bed
 ```
 
 Python API:
@@ -585,8 +540,8 @@ db.download_cgi(species="hg38")
 ```bash
 sjcab-peak2anno-db list
 sjcab-peak2anno-db install
-sjcab-peak2anno-db install anno-bed anno-feature blacklists cgi
-sjcab-peak2anno-db install -c anno-bed -c anno-feature
+sjcab-peak2anno-db install genebed feature blacklists cgi
+sjcab-peak2anno-db install -c genebed -c feature
 sjcab-peak2anno-db install --overwrite
 
 sjcab-peak2anno-db install-genebed

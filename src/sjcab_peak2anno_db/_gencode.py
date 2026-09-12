@@ -94,6 +94,7 @@ _ENSEMBL_DIVISION_ORDER = {
 }
 UCSC_GENES_URL = "https://hgdownload.soe.ucsc.edu/goldenPath/{}/bigZips/genes/"
 UCSC_DOWNLOADS_URL = "https://hgdownload.soe.ucsc.edu/downloads.html"
+UCSC_LIFTOVER_URL = "https://hgdownload.soe.ucsc.edu/goldenPath/hg38/liftOver/"
 NCBI_EUTILS_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/{}"
 
 
@@ -330,16 +331,19 @@ def _ucsc_gtf_builds(
     cache_dir: Optional[PathLike] = None,
     sizes_clean: Optional[bool] = None,
 ):
-    """Return UCSC build IDs, refreshing the runtime cache after six months."""
+    """Return UCSC build IDs, refreshing the runtime cache when stale."""
 
     cache_path = user_data_dir(cache_dir) / "ucsc" / "gtf_builds.tsv"
     old_builds = _read_ucsc_builds(cache_path) if cache_path.exists() else set()
-    if cache_path.exists() and time.time() - cache_path.stat().st_mtime < 180 * 86400:
+    if cache_path.exists() and time.time() - cache_path.stat().st_mtime < configured_stale_seconds():
+        if _ucsc_chain_rows_need_migration(cache_path) or not _read_ucsc_chain_urls(cache_path):
+            _cache_ucsc_chain_urls(cache_path)
         return old_builds
     package_path = data_root() / "gtf_builds.tsv"
     if not cache_path.exists() and package_path.exists():
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(package_path, cache_path)
+        _cache_ucsc_chain_urls(cache_path)
         return _read_ucsc_builds(cache_path)
 
     try:
@@ -354,10 +358,13 @@ def _ucsc_gtf_builds(
         if package_path.exists():
             cache_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(package_path, cache_path)
+            _cache_ucsc_chain_urls(cache_path)
             return _read_ucsc_builds(cache_path)
         raise
 
     builds = set()
+    metadata_path = cache_path if cache_path.exists() else package_path
+    descriptions = _read_ucsc_descriptions(metadata_path) if metadata_path.exists() else {}
     hrefs = re.findall(r'href=["\']([^"\']+)["\']', page, re.IGNORECASE)
     for href in hrefs:
         match = re.search(
@@ -376,9 +383,16 @@ def _ucsc_gtf_builds(
 
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = cache_path.with_name(cache_path.name + ".tmp")
+    chain_urls = _download_ucsc_chain_urls()
     with tmp_path.open("w", encoding="utf-8") as handle:
         for build in sorted(builds):
-            handle.write(build + "\n")
+            description = descriptions.get(build)
+            handle.write(
+                "{}\t{}\n".format(build, description)
+                if description
+                else build + "\n"
+            )
+    _merge_ucsc_chain_rows(tmp_path, chain_urls)
     tmp_path.replace(cache_path)
     _cache_new_ucsc_sizes(builds - old_builds, cache_dir, sizes_clean=sizes_clean)
     return builds
@@ -390,7 +404,123 @@ def _read_ucsc_builds(path: Path):
             row.split("\t", 1)[0].strip()
             for row in handle
             if row.strip() and not row.startswith("#")
-        }
+    }
+
+
+def _read_ucsc_descriptions(path: Path):
+    descriptions = {}
+    with path.open("r", encoding="utf-8") as handle:
+        for row in handle:
+            fields = row.rstrip("\n").split("\t")
+            if len(fields) >= 2 and fields[0].strip() and not fields[0].startswith("#"):
+                descriptions[fields[0].strip()] = fields[1].strip()
+    return descriptions
+
+
+def _read_ucsc_chain_urls(path: Path):
+    urls = {}
+    with path.open("r", encoding="utf-8") as handle:
+        for row in handle:
+            fields = row.rstrip("\n").split("\t")
+            if len(fields) >= 4 and fields[2].strip().lower().endswith(".over.chain.gz"):
+                urls[fields[2].strip()] = fields[3].strip()
+            elif len(fields) >= 3 and fields[0].strip().lower() == "#liftover":
+                urls[fields[1].strip()] = fields[2].strip()
+    return urls
+
+
+def _ucsc_chain_rows_need_migration(path: Path) -> bool:
+    with path.open("r", encoding="utf-8") as handle:
+        return any(row.lower().startswith("#liftover\t") for row in handle)
+
+
+def _download_ucsc_chain_urls():
+    try:
+        request = urllib.request.Request(
+            UCSC_LIFTOVER_URL, headers={"User-Agent": "sjcab_peak2anno_db"}
+        )
+        with urllib.request.urlopen(request, timeout=120) as response:
+            page = response.read().decode("utf-8", "replace")
+    except OSError:
+        return {}
+    urls = {}
+    for href in re.findall(r'href=["\']([^"\']+\.over\.chain\.gz)["\']', page, re.IGNORECASE):
+        url = urllib.parse.urljoin(UCSC_LIFTOVER_URL, href)
+        urls[Path(urllib.parse.urlparse(url).path).name] = url
+    return urls
+
+
+def _cache_ucsc_chain_urls(cache_path: Path):
+    urls = _download_ucsc_chain_urls()
+    if not urls:
+        return
+    _merge_ucsc_chain_rows(cache_path, urls)
+
+
+def _merge_ucsc_chain_rows(path: Path, chain_urls: Dict[str, str]) -> None:
+    """Attach cached liftOver chain names and URLs to UCSC build rows."""
+
+    rows = []
+    for row in path.read_text(encoding="utf-8").splitlines():
+        fields = row.split("\t")
+        if not row.strip() or row.startswith("#"):
+            continue
+        build = fields[0].strip()
+        if not build:
+            continue
+        chain = _chain_for_ucsc_build(build, chain_urls)
+        if chain is not None:
+            fields = fields[:2] + [chain[0], chain[1]]
+        rows.append("\t".join(fields))
+    path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+
+def _chain_for_ucsc_build(build: str, chain_urls: Dict[str, str]):
+    wanted = build.casefold()
+    matches = []
+    for name, url in chain_urls.items():
+        match = re.fullmatch(r"hg38to(.+?)\.over\.chain\.gz", name, re.IGNORECASE)
+        if match is None:
+            continue
+        target = match.group(1)
+        if target.casefold() == wanted:
+            return name, url
+        target_base = re.sub(r"[0-9]+$", "", target).casefold()
+        build_base = re.sub(r"[0-9]+$", "", build).casefold()
+        if target_base == build_base:
+            suffix = re.search(r"[0-9]+$", target)
+            matches.append((int(suffix.group()) if suffix else -1, name, url))
+    if matches:
+        _, name, url = max(matches)
+        return name, url
+    return None
+
+
+def ucsc_liftover_chain_url(
+    source_genome: str,
+    chain_name: str,
+    cache_dir: Optional[PathLike] = None,
+) -> str:
+    """Resolve a hg38 liftOver chain from the cached UCSC directory listing."""
+
+    if str(source_genome).lower() == "hg38":
+        cache_path = user_data_dir(cache_dir) / "ucsc" / "gtf_builds.tsv"
+        _ucsc_gtf_builds(cache_dir)
+        requested = re.fullmatch(
+            r"(.+?)to(.+?)\.over\.chain\.gz", chain_name, re.IGNORECASE
+        )
+        for name, url in _read_ucsc_chain_urls(cache_path).items():
+            cached = re.fullmatch(
+                r"(.+?)to(.+?)\.over\.chain\.gz", name, re.IGNORECASE
+            )
+            if cached and requested and tuple(
+                part.casefold() for part in cached.groups()
+            ) == tuple(part.casefold() for part in requested.groups()):
+                return url
+    return urllib.parse.urljoin(
+        "https://hgdownload.soe.ucsc.edu/goldenPath/{}/liftOver/".format(source_genome),
+        chain_name,
+    )
 
 
 def _cache_new_ucsc_sizes(
