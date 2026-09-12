@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61", "wheel"]
+requires = ["setuptools>=61", "setuptools-scm>=7,<8", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "sjcab_peak2anno_db"
-version = "0.1.8"
+dynamic = ["version"]
 description = "Gene-backed peak-to-annotation BED resources for SJ/CAB workflows."
 readme = "README.md"
 requires-python = ">=3.7"
@@ -36,6 +36,9 @@ sjcab-peak2anno-db = "sjcab_peak2anno_db._cli:main"
 [tool.setuptools]
 package-dir = { "" = "src" }
 include-package-data = true
+
+[tool.setuptools_scm]
+version_file = "src/sjcab_peak2anno_db/_version.py"
 
 [tool.setuptools.packages.find]
 where = ["src"]

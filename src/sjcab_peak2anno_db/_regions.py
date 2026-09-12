@@ -12,6 +12,7 @@ import subprocess
 import time
 import urllib.parse
 import urllib.request
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
@@ -160,10 +161,15 @@ def download_gencode_feature(
     sizes_clean: Optional[bool] = None,
     data_species: Optional[str] = None,
     collector_backend: str = "python",
+    processes: int = 1,
     *,
     gene_bed_output: Optional[PathLike] = None,
 ) -> Mapping[str, Path]:
-    """Download/convert GENCODE GTF and write old-style feature BED classes."""
+    """Download/convert GENCODE GTF and write old-style feature BED classes.
+
+    ``processes`` controls both gene-BED conversion and parallel feature-file
+    writing; ``1`` keeps the single-process behavior.
+    """
 
     target_dir = Path(output_dir).expanduser()
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -199,6 +205,7 @@ def download_gencode_feature(
             convert_gencode_gtf_to_bed(
                 gtf_for_regions,
                 gene_bed,
+                processes=processes,
             )
     else:
         gene_bed = Path(gene_bed).expanduser()
@@ -232,6 +239,7 @@ def download_gencode_feature(
             sizes_clean=sizes_clean,
         ),
         collector_backend=collector_backend,
+        processes=processes,
     )
     report_progress(progress, "download-feature: legacy BED files done")
     outputs["list"] = write_gencode_feature_list(outputs, target_dir, label)
@@ -331,6 +339,7 @@ def write_legacy_gencode_feature_unions(
     chrom_sizes: Optional[PathLike] = None,
     backend: str = "auto",
     collector_backend: str = "python",
+    processes: int = 1,
 ) -> Mapping[str, Path]:
     """Write legacy CAB/``annotate_prep.sh`` feature BED classes.
 
@@ -342,9 +351,12 @@ def write_legacy_gencode_feature_unions(
 
     ``backend="auto"`` prefers ``pybedtools``, then the ``bedtools`` command,
     and finally the built-in writer. The accelerated backends are optional and
-    only affect serialization of the already-computed intervals.
+    only affect serialization of the already-computed intervals. ``processes``
+    controls parallel serialization of the independent feature files.
     """
 
+    if processes < 1:
+        raise ValueError("processes must be at least 1")
     promoter = _parse_bp(promoter_bp)
     distal = _parse_bp(distal_bp)
     tes = _parse_bp(tes_bp)
@@ -370,16 +382,32 @@ def write_legacy_gencode_feature_unions(
     target_dir = Path(output_dir).expanduser()
     target_dir.mkdir(parents=True, exist_ok=True)
     outputs = {}  # type: Dict[str, Path]
-    for region_type in GENCODE_FEATURE_LIST_ORDER + ("promoter",):
-        output_path = target_dir / "{}.{}.bed".format(label, region_type)
-        _write_intervals(
+    jobs = [
+        (
+            region_type,
             parsed.intervals[region_type],
             parsed.chrom_order,
-            output_path,
-            backend=backend,
+            target_dir / "{}.{}.bed".format(label, region_type),
+            backend,
         )
-        outputs[region_type] = output_path
+        for region_type in GENCODE_FEATURE_LIST_ORDER + ("promoter",)
+    ]
+    if processes > 1:
+        with ProcessPoolExecutor(max_workers=processes) as executor:
+            written = executor.map(_write_feature_intervals_worker, jobs)
+            for region_type, output_path in written:
+                outputs[region_type] = output_path
+    else:
+        for job in jobs:
+            region_type, output_path = _write_feature_intervals_worker(job)
+            outputs[region_type] = output_path
     return outputs
+
+
+def _write_feature_intervals_worker(job):
+    region_type, intervals, chrom_order, output_path, backend = job
+    _write_intervals(intervals, chrom_order, output_path, backend=backend)
+    return region_type, output_path
 
 
 class _ParsedGencodeRegions:

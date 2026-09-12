@@ -10,6 +10,7 @@ import shutil
 import time
 import urllib.parse
 import urllib.request
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, Mapping, Optional, Tuple, Union
@@ -1180,6 +1181,7 @@ def convert_gencode_gtf_to_bed(
     gtf_path: PathLike,
     output_bed: PathLike,
     gene_types: Optional[Iterable[str]] = None,
+    processes: int = 1,
 ) -> Path:
     """Convert a GENCODE GTF to a transcript-level gene BED file.
 
@@ -1190,11 +1192,15 @@ def convert_gencode_gtf_to_bed(
     ``gene_id.version, transcript_id.version, gene_type``.
 
     ``gene_types`` can be used to keep only selected GENCODE gene types.
+    ``processes`` controls parallel transcript formatting; ``1`` keeps the
+    single-process behavior.
     """
 
     output = Path(output_bed).expanduser()
     output.parent.mkdir(parents=True, exist_ok=True)
 
+    if processes < 1:
+        raise ValueError("processes must be at least 1")
     selected_types = None
     if gene_types is not None:
         selected_types = set(gene_types)
@@ -1202,24 +1208,25 @@ def convert_gencode_gtf_to_bed(
     records, order = _read_transcripts(gtf_path)
     tmp_path = output.with_name(output.name + ".tmp")
     try:
+        records_in_order = [records[transcript_id] for transcript_id in order]
+        if processes > 1:
+            with ProcessPoolExecutor(max_workers=processes) as executor:
+                lines = executor.map(
+                    _format_transcript_bed,
+                    records_in_order,
+                    [selected_types] * len(records_in_order),
+                    chunksize=max(1, len(records_in_order) // (processes * 4) or 1),
+                )
+                formatted_lines = lines
+        else:
+            formatted_lines = (
+                _format_transcript_bed(record, selected_types)
+                for record in records_in_order
+            )
         with tmp_path.open("w", encoding="utf-8") as handle:
-            for transcript_id in order:
-                record = records[transcript_id]
-                if selected_types is not None and record.gene_type not in selected_types:
-                    continue
-                length = record.exon_length or (record.end - record.start)
-                fields = [
-                    record.chrom,
-                    str(record.start),
-                    str(record.end),
-                    record.gene_name,
-                    str(length),
-                    record.strand,
-                    record.gene_id,
-                    record.transcript_id,
-                ]
-                fields.append(record.gene_type)
-                handle.write("{}\n".format("\t".join(fields)))
+            for line in formatted_lines:
+                if line:
+                    handle.write(line)
         tmp_path.replace(output)
     finally:
         if tmp_path.exists():
@@ -1243,6 +1250,7 @@ def download_and_convert_gencode_gtf(
     cache_dir: Optional[PathLike] = None,
     ucsc_annotation: str = "ens",
     clean_cache: Optional[Union[bool, int]] = None,
+    processes: int = 1,
 ) -> Path:
     """Download or reuse a GENCODE GTF and convert it to BED.
 
@@ -1288,6 +1296,7 @@ def download_and_convert_gencode_gtf(
             gtf_path,
             output_bed,
             gene_types=gene_types,
+            processes=processes,
         )
 
     if layout_mode and version_dir is not None:
@@ -1305,10 +1314,32 @@ def download_and_convert_gencode_gtf(
     return output_bed
 
 
+def _format_transcript_bed(
+    record: _TranscriptRecord,
+    selected_types: Optional[set],
+) -> str:
+    if selected_types is not None and record.gene_type not in selected_types:
+        return ""
+    length = record.exon_length or (record.end - record.start)
+    fields = [
+        record.chrom,
+        str(record.start),
+        str(record.end),
+        record.gene_name,
+        str(length),
+        record.strand,
+        record.gene_id,
+        record.transcript_id,
+        record.gene_type,
+    ]
+    return "{}\n".format("\t".join(fields))
+
+
 def regenerate_gencode_beds(
     output_dir: PathLike,
     specs: Iterable[Tuple[str, str, PathLike]],
     overwrite: bool = True,
+    processes: int = 1,
 ) -> Tuple[Path, ...]:
     """Regenerate several GENCODE BED files from local GTF paths.
 
@@ -1326,6 +1357,7 @@ def regenerate_gencode_beds(
                 output_dir,
                 gtf_path=gtf_path,
                 overwrite=overwrite,
+                processes=processes,
             )
         )
     return tuple(generated)

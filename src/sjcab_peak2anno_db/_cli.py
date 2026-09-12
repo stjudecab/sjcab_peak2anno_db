@@ -132,6 +132,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="Clean cache files older than DAYS (default 90); negative means immediately.",
     )
     install_parser.add_argument(
+        "-j", "--processes", type=int, default=1,
+        help="Number of worker processes for GTF/BED and feature generation.",
+    )
+    install_parser.add_argument(
         "--sizes-clean", nargs="?", const=1, type=int, default=None, metavar="0|1",
         help="Create .sizes.clean files (default); use --sizes-clean 0 to disable.",
     )
@@ -353,6 +357,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         action="store_true",
         help="Do not rewrite existing GTF or BED files.",
     )
+    gencode_parser.add_argument(
+        "-j", "--processes", type=int, default=1,
+        help="Number of worker processes for GTF-to-BED conversion.",
+    )
 
     _add_gencode_feature_parser(
         subparsers,
@@ -421,6 +429,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 ucsc_annotation=args.ucsc_source,
                 clean_cache=args.clean_cache,
                 sizes_clean=args.sizes_clean,
+                processes=args.processes,
             )
             print(target)
             return 0
@@ -497,6 +506,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 custom_name=args.name,
                 clean_cache=args.clean_cache,
                 sizes_clean=args.sizes_clean,
+                processes=args.processes,
             )
             print(target)
             return 0
@@ -549,6 +559,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 overwrite=not args.no_overwrite,
                 progress=_stderr_progress,
                 clean_cache=args.clean_cache,
+                processes=args.processes,
             )
             print(target)
             return 0
@@ -593,6 +604,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     ucsc_annotation=args.ucsc_source,
                     clean_cache=args.clean_cache,
                     sizes_clean=args.sizes_clean,
+                    processes=args.processes,
                 )
                 for name in sorted(targets):
                     if multi_spec:
@@ -881,6 +893,10 @@ def _add_feature_generation_arguments(
     parser.add_argument(
         "--sizes-clean", nargs="?", const=1, type=int, default=None, metavar="0|1",
         help="Create .sizes.clean files (default); use --sizes-clean 0 to disable.",
+    )
+    parser.add_argument(
+        "-j", "--processes", type=int, default=1,
+        help="Number of worker processes for GTF/BED and feature generation.",
     )
     parser.add_argument(
         "-b",

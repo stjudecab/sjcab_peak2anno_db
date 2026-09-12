@@ -1,5 +1,11 @@
 {% set name = "sjcab_peak2anno_db" %}
-{% set version = "0.1.8" %}
+{% set version = load_file_regex(
+    load_file="../src/sjcab_peak2anno_db/_version.py",
+    regex_pattern="__version__ = [\\\"']([^\\\"']+)[\\\"']"
+)[1] %}
+{% if environ.get("SETUPTOOLS_SCM_PRETEND_VERSION") %}
+{% set version = environ.get("SETUPTOOLS_SCM_PRETEND_VERSION") %}
+{% endif %}
 
 package:
   name: {{ name|lower }}
@@ -18,6 +24,7 @@ requirements:
     - python >=3.7
     - pip
     - setuptools >=61
+    - setuptools-scm >=7,<8
     - wheel
   run:
     - python >=3.7

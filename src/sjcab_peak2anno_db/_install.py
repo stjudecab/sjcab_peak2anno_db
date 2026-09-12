@@ -56,6 +56,7 @@ def install_data(
     ucsc_annotation: str = "ens",
     clean_cache: Optional[Union[bool, int]] = None,
     sizes_clean: Optional[bool] = None,
+    processes: int = 1,
 ) -> Path:
     """Install selected resources into the user data directory.
 
@@ -66,6 +67,8 @@ def install_data(
     ``clean_cache`` are forwarded to GENCODE feature generation.
     """
 
+    if processes < 1:
+        raise ValueError("processes must be at least 1")
     config = load_config()
     selected = _normalize_install_components(
         components
@@ -88,6 +91,7 @@ def install_data(
             ucsc_annotation=ucsc_annotation,
             clean_cache=clean_cache,
             sizes_clean=sizes_clean,
+            processes=processes,
         )
         if config.feature_specs_configured:
             for feature_species, feature_version in config.feature_specs:
@@ -164,6 +168,7 @@ def install_gencode_features(
     sizes_clean: Optional[bool] = None,
     custom_name: Optional[str] = None,
     collector_backend: str = "python",
+    processes: int = 1,
 ) -> Path:
     """Install bundled derived annotations and downloaded GENCODE features.
 
@@ -174,6 +179,8 @@ def install_gencode_features(
     pointing to the selected version/prefix directory.
     """
 
+    if processes < 1:
+        raise ValueError("processes must be at least 1")
     report_progress(progress, "install-feature: started")
     report_progress(progress, "install-feature: installing GENCODE BEDs")
     target_root = install_gencode_beds(data_dir, overwrite=overwrite)
@@ -208,6 +215,7 @@ def install_gencode_features(
             sizes_clean=sizes_clean,
             custom_name=custom_name,
             collector_backend=collector_backend,
+            processes=processes,
             skip_existing=_can_skip_existing_feature_install(
                 source_dir=output_dir,
                 gtf_path=gtf_path,
@@ -248,9 +256,12 @@ def install_gencode_feature_set(
     sizes_clean: Optional[bool] = None,
     custom_name: Optional[str] = None,
     collector_backend: str = "python",
+    processes: int = 1,
 ) -> Path:
     """Install one downloaded GENCODE feature set into the cache."""
 
+    if processes < 1:
+        raise ValueError("processes must be at least 1")
     target_root = user_data_dir(data_dir)
     assembly_name = data_species_name(species, version, cache_dir=cache_dir)
     storage_species = custom_name or assembly_name
@@ -315,6 +326,7 @@ def install_gencode_feature_set(
                 sizes_clean=sizes_clean,
                 data_species=storage_species,
                 collector_backend=collector_backend,
+                processes=processes,
                 gene_bed_output=gene_bed_output,
             )
         _copy_preprocessed_feature_dir(
@@ -345,6 +357,7 @@ def install_gencode_feature_set(
             sizes_clean=sizes_clean,
             data_species=storage_species,
             collector_backend=collector_backend,
+            processes=processes,
             gene_bed_output=gene_bed_output,
         )
     if selected_gene_bed is None:

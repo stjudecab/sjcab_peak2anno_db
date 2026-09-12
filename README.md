@@ -69,6 +69,8 @@ Common option styles:
   cleanup behavior.
 - `--sizes-clean [0|1]`: create `.sizes.clean` files by default. Use
   `--sizes-clean 0` to disable them. 
+- `-j`, `--processes N`: use `N` worker processes for GTF-to-genebed
+  conversion and feature BED generation. Default is `1`.
 - `-g`, `--gtf-path FILE`: use an existing local GTF instead of downloading
   one.
 - `-u`, `--url URL`: override the resolved GTF URL.
