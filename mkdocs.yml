@@ -10,3 +10,12 @@ theme:
 
 nav:
   - Home: index.md
+  - Getting started:
+      - Installation and quick start: getting-started.md
+      - Common options and configuration: configuration.md
+  - Annotation resources:
+      - Genebed: genebed.md
+      - Feature BEDs: features.md
+      - ChromHMM, Segway, and external resources: datasets.md
+  - Selection and filtering:
+      - Deduplication and selectors: deduplication.md
