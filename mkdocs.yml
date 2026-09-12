@@ -4,11 +4,9 @@ site_url: https://sjcab-peak2anno-db.readthedocs.io/
 repo_url: https://github.com/stjudecab/sjcab_peak2anno_db
 repo_name: stjudecab/sjcab_peak2anno_db
 
-docs_dir: .
+docs_dir: docs
 theme:
   name: readthedocs
 
 nav:
-  - Home: README.md
-  - Deduplication: README.DEDUP.md
-  - Blacklists: src/sjcab_peak2anno_db/data/blacklists/readme.md
+  - Home: index.md
