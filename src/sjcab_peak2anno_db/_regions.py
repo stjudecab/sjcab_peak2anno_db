@@ -60,7 +60,7 @@ def write_tss_flank_region_unions(
     prefix: Optional[str] = None,
     split_tss: bool = True,
 ) -> Mapping[str, Path]:
-    """Write merged old-style promoter/distal BED classes from a gene BED file.
+    """Write merged old-style promoter/distal FeatureBED classes from a GeneBED file.
 
     The generated files match the legacy CAB/``annotate_prep.sh`` classes:
     promoter and ``dis5`` are strand-aware TSS flanks, while ``dis3`` is a
@@ -165,7 +165,7 @@ def download_gencode_feature(
     *,
     gene_bed_output: Optional[PathLike] = None,
 ) -> Mapping[str, Path]:
-    """Download/convert GENCODE GTF and write old-style feature BED classes.
+    """Download/convert GENCODE GTF and write old-style FeatureBED classes.
 
     ``processes`` controls both gene-BED conversion and parallel feature-file
     writing; ``1`` keeps the single-process behavior.
@@ -201,7 +201,7 @@ def download_gencode_feature(
         else:
             gene_bed = Path(gene_bed_output).expanduser()
         if overwrite or not Path(gene_bed).exists():
-            report_progress(progress, "download-feature: converting gene BED")
+            report_progress(progress, "download-feature: converting GeneBED")
             convert_gencode_gtf_to_bed(
                 gtf_for_regions,
                 gene_bed,
@@ -211,13 +211,13 @@ def download_gencode_feature(
         gene_bed = Path(gene_bed).expanduser()
         report_progress(
             progress,
-            "download-feature: using existing gene BED {}".format(gene_bed),
+            "download-feature: using existing GeneBED {}".format(gene_bed),
         )
 
     label = gencode_feature_prefix(promoter_bp=promoter_bp, prefix=prefix)
     report_progress(
         progress,
-        "download-feature: writing legacy feature BED files",
+            "download-feature: writing legacy FeatureBED files",
     )
     outputs = write_legacy_gencode_feature_unions(
         gene_bed,
@@ -302,7 +302,7 @@ def write_gencode_feature_list(
     output_dir: PathLike,
     prefix: str,
 ) -> Path:
-    """Write an ordered list of generated GENCODE feature BED files."""
+    """Write an ordered list of generated GENCODE FeatureBED files."""
 
     target_dir = Path(output_dir).expanduser()
     list_path = target_dir / "order.lst"
@@ -341,7 +341,7 @@ def write_legacy_gencode_feature_unions(
     collector_backend: str = "python",
     processes: int = 1,
 ) -> Mapping[str, Path]:
-    """Write legacy CAB/``annotate_prep.sh`` feature BED classes.
+    """Write legacy CAB/``annotate_prep.sh`` FeatureBED classes.
 
     This mirrors the old preparation script without requiring BEDTools:
     promoter and ``dis5`` are strand-aware TSS flanks, ``dis3`` is a

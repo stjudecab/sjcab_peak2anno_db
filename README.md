@@ -14,20 +14,20 @@ pip install sjcab_peak2anno_db
 conda install stjudecab::sjcab_peak2anno_db
 
 export SJCAB_PEAK2ANNO_DB_PATH=~/.sjcab_peak2anno_db
-sjcab-peak2anno-db install # install default for "genebed feature blacklists cgi"
+sjcab-peak2anno-db install # install default for "GeneBEDs FeatureBEDs blacklists cgi"
 sjcab-peak2anno-db install genebed feature # install selected default group
 sjcab-peak2anno-db list # list default bundle
 
-sjcab-peak2anno-db download-genebed hg38 v31 -o annotations # download Gencode hg38 v31 genebeds to annotation folder
+sjcab-peak2anno-db download-genebed hg38 v31 -o annotations # download Gencode hg38 v31 GeneBEDs to annotation folder
 sjcab-peak2anno-db install-genebed hg19 v31lift37 # install Gencode hg19 v31lift37 to --db-path
-sjcab-peak2anno-db download-feature mm10 vM22 -g gencode.vM22.annotation.gtf.gz -o annotations # convert own gtf file to genebed and features
-sjcab-peak2anno-db install-feature cat 116 # install genebed/feature for cat ensemble release 116
-sjcab-peak2anno-db install-feature equcab2 # install genebed/feature for horse UCSC version equCab2
-sjcab-peak2anno-db install-feature zea_mays # install genebed/feature for corn ensemble current release(empty/def/default/current/latest are the same)
+sjcab-peak2anno-db download-feature mm10 vM22 -g gencode.vM22.annotation.gtf.gz -o annotations # convert own gtf file to GeneBED and FeatureBEDs
+sjcab-peak2anno-db install-feature cat 116 # install GeneBEDs/FeatureBEDs for cat ensemble release 116
+sjcab-peak2anno-db install-feature equcab2 # install GeneBEDs/FeatureBEDs for horse UCSC version equCab2
+sjcab-peak2anno-db install-feature zea_mays # install GeneBEDs/FeatureBEDs for corn ensemble current release(empty/def/default/current/latest are the same)
 ```
 
-Supported bundled genebed species are `hg19`, `hg38`, `mm10`, `mm9`,
-`mm39`(Gencode) and `sacCer3`. All other genebed/feature for species/version would auto found gtf from Gencode/UCSC/Ensemble and automatic generate.
+Supported bundled GeneBED species are `hg19`, `hg38`, `mm10`, `mm9`,
+`mm39`(Gencode) and `sacCer3`. All other GeneBED/FeatureBED resources for species/version are automatically generated from GENCODE/UCSC/Ensembl GTFs.
 CGI: `hg38`, `hg19`, `mm10`, `mm9`, and `mm39`
 blacklists: [readme.md](https://github.com/stjudecab/sjcab_peak2anno_db/tree/main/src/sjcab_peak2anno_db/data/blacklists)
 
@@ -40,7 +40,7 @@ The general difference between command pairs is the destination:
 - `install-*`: install or generate resources under the configured `db_path`
   directory.
 - `download-*`: write downloaded/generated resources under `--output-dir` (default workdir).
-- `*-feature`: would install/download both genebed and feature
+- `*-feature`: installs/downloads both GeneBEDs and FeatureBEDs
 - `blacklists|cgi|chromhmm|segway`: if there isn't available resource for selected
   species from UCSC, liftover script can be provided based on chain file from UCSC.
 
@@ -69,8 +69,8 @@ Common option styles:
   cleanup behavior.
 - `--sizes-clean [0|1]`: create `.sizes.clean` files by default. Use
   `--sizes-clean 0` to disable them. 
-- `-j`, `--processes N`: use `N` worker processes for GTF-to-genebed
-  conversion and feature BED generation. Default is `1`.
+- `-j`, `--processes N`: use `N` worker processes for GTF-to-GeneBED
+  conversion and FeatureBED generation. Default is `1`.
 - `-g`, `--gtf-path FILE`: use an existing local GTF instead of downloading
   one.
 - `-u`, `--url URL`: override the resolved GTF URL.
@@ -120,7 +120,7 @@ after BED generation. A negative value removes the newly used cached GTF
 immediately. The command-line form is `--clean-cache [DAYS]`; using
 `--clean-cache` without a value means immediate cleanup.
 
-## Genebed
+## GeneBEDs
 
 GeneBED resources provide transcript-level gene annotations. Two isoform
 sets are generated:
@@ -258,15 +258,15 @@ import sjcab_peak2anno_db as db
 print(db.path("hg38", "gene"))
 ```
 
-## Feature Bed
+## FeatureBEDs
 
-Feature resources are CAB-style merged region BEDs derived from GTF and gene BED
+FeatureBED resources are CAB-style merged region BEDs derived from GTF and GeneBED
 input. The default prefix is the promoter size label, usually `2kb`.
 
 ### `install-feature` / `download-feature`
 
 ```bash
-# Install or generate merged feature BED resources.
+# Install or generate merged FeatureBED resources.
 sjcab-peak2anno-db install-feature all all
 sjcab-peak2anno-db install-feature hg38 v31
 sjcab-peak2anno-db install-feature hg38 v31 -o feature_downloads
@@ -285,7 +285,7 @@ The `-name` mapping is written to `custom.name.tsv` in the selected data
 directory.
 
 `install-feature -o DIR` reuses preprocessed feature files from `DIR`
-when `order.lst` and the expected feature BED files are already present. Like
+when `order.lst` and the expected FeatureBED files are already present. Like
 `download-genebed`, feature generation reuses the cached GTF, then an expected GTF
 from the output directory or current working directory before downloading.
 `install-feature` reuses existing generated files by default; pass
@@ -343,7 +343,7 @@ Main feature parameters:
 - `--distal-bp`/`-D`: distal flank size, default `50kb`.
 - `--tes-bp`/`-e`: TES flank size, default `2kb`.
 - `--prefix`/`-P`: output prefix, default is the promoter size label.
-- `--gene-bed`/`-b`: use an existing gene BED for region generation.
+- `--gene-bed`/`-b`: use an existing GeneBED for region generation.
 - `--gtf-path`/`-g`: use an existing local GTF.
 
 Python API:

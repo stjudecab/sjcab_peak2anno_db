@@ -60,9 +60,9 @@ def install_data(
 ) -> Path:
     """Install selected resources into the user data directory.
 
-    By default this installs ``genebed``, ``feature``,
+    By default this installs the ``genebed`` (GeneBEDs) and ``feature``
     ``blacklists``, and ``cgi``. ``feature`` installs the bundled gene
-    BED files plus deduplicated longest-isoform gene BEDs.
+    GeneBED files plus deduplicated longest-isoform GeneBEDs.
     ``cache_dir`` controls downloaded GTF placement; ``ucsc_annotation`` and
     ``clean_cache`` are forwarded to GENCODE feature generation.
     """
@@ -80,9 +80,9 @@ def install_data(
     report_progress(progress, "install: started")
 
     if "genebed" in selected:
-        report_progress(progress, "install: installing genebed")
+        report_progress(progress, "install: installing GeneBEDs")
         install_gencode_beds(target_root, overwrite=overwrite)
-        report_progress(progress, "install: genebed done")
+        report_progress(progress, "install: GeneBEDs done")
     if "feature" in selected:
         feature_kwargs = dict(
             overwrite=overwrite,

@@ -20,7 +20,7 @@ sjcab-peak2anno-db install genebed feature blacklists cgi
 sjcab-peak2anno-db install -c genebed -c feature
 ```
 
-The supported install components are `genebed`, `feature`, `blacklists`, and
+The supported install components are `genebed` (GeneBEDs), `feature`, blacklists, and
 `cgi`. `list` shows the bundled registry, while `path` prints a resource path.
 
 ## First downloaded resources
@@ -31,7 +31,7 @@ sjcab-peak2anno-db download-feature mm10 vM22 -o annotations
 sjcab-peak2anno-db install-feature cat def
 ```
 
-Use `-j/--processes` to parallelize GTF-to-genebed conversion and feature BED
+Use `-j/--processes` to parallelize GTF-to-GeneBED conversion and FeatureBED
 generation:
 
 ```bash
@@ -53,4 +53,4 @@ db.download_feature("hg38", "v31", "annotations")
 Downloads first search the database cache, then the output directory, then the
 current working directory. Download URLs are recorded in
 `{db-path}/download_urls.log`. GENCODE, UCSC, and Ensembl resolution details
-are documented in the [Genebed](genebed.md) guide.
+are documented in the [GeneBEDs](genebeds.md) guide.

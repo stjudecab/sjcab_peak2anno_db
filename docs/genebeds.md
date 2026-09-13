@@ -1,6 +1,6 @@
-# Genebed resources
+# GeneBEDs resources
 
-Gene BED resources are transcript-level annotations. `all` contains every
+GeneBED resources are transcript-level annotations. `all` contains every
 transcript isoform; `deduplong` keeps one longest isoform per gene. The
 `def` link points to the registry-defined default version.
 
@@ -35,7 +35,7 @@ possible; `.sizes.clean` uses primary chromosomes from the assembly report.
 {db-path}/sizes/{species}.sizes.clean
 ```
 
-## Feature generation from a local GTF
+## GeneBED generation from a local GTF
 
 ```bash
 sjcab-peak2anno-db download-genebed mm10 vM22 \
@@ -45,5 +45,5 @@ sjcab-peak2anno-db download-genebed mm10 vM22 \
 ```
 
 Use `--gene-type` repeatedly to restrict GENCODE types. See
-[Feature BEDs](features.md) for derived regions and
+[FeatureBEDs](features.md) for derived regions and
 [Deduplication](deduplication.md) for transcript selection.

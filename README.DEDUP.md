@@ -58,7 +58,7 @@ These examples use an all-isoform BED. BED column 4 is the gene name used to
 group transcripts. `GENE1` intentionally has two non-overlapping transcript
 regions so selector results are visible.
 
-Input gene BED:
+Input GeneBED:
 
 ```text
 chr1    100    200    GENE1    100    +    ENSG1    ENST1

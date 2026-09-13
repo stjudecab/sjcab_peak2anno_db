@@ -14,7 +14,7 @@
   is 90 days; a negative value removes the current cached GTF immediately.
 - `--sizes-clean [0|1]`: create `.sizes.clean` files by default; use `0` to
   disable them.
-- `-j`, `--processes N`: worker processes for GTF-to-genebed and feature BED
+- `-j`, `--processes N`: worker processes for GTF-to-GeneBED and FeatureBED
   generation. The default is `1`.
 - `-g`, `--gtf-path`: use a local GTF.
 - `-u`, `--url`: override the resolved GTF URL.

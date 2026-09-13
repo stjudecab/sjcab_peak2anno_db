@@ -12,7 +12,7 @@ and transcript-selection guides.
 `install-*` commands put resources under the configured database directory.
 `download-*` commands write to a staging directory, which defaults to the
 current working directory. Commands ending in `-feature` generate both gene
-BED and derived feature BED resources.
+GeneBED and derived FeatureBED resources.
 
 ## Quick start
 

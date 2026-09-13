@@ -133,7 +133,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     install_parser.add_argument(
         "-j", "--processes", type=int, default=1,
-        help="Number of worker processes for GTF/BED and feature generation.",
+        help="Number of worker processes for GTF/GeneBED and FeatureBED generation.",
     )
     install_parser.add_argument(
         "--sizes-clean", nargs="?", const=1, type=int, default=None, metavar="0|1",
@@ -343,7 +343,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     gencode_parser.add_argument(
         "-b",
         "--output-bed",
-        help="Explicit single generated gene BED path.",
+        help="Explicit single generated GeneBED path.",
     )
     gencode_parser.add_argument(
         "-t",
@@ -359,13 +359,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     gencode_parser.add_argument(
         "-j", "--processes", type=int, default=1,
-        help="Number of worker processes for GTF-to-BED conversion.",
+        help="Number of worker processes for GTF-to-GeneBED conversion.",
     )
 
     _add_gencode_feature_parser(
         subparsers,
         "download-feature",
-        "Download/convert GENCODE and write merged feature BED classes.",
+        "Download/convert GENCODE and write merged FeatureBED classes.",
     )
 
     _add_dedup_filter_parser(
@@ -777,7 +777,7 @@ def _add_gencode_feature_parser(
         "-o",
         "--output-dir",
         default=".",
-        help="Directory for generated gene and feature BED files.",
+        help="Directory for generated GeneBED and FeatureBED files.",
     )
     parser.add_argument("-d", "--db-path", dest="data_dir", help="Database/cache directory.")
     _add_feature_generation_arguments(parser, include_output_dir=False)
@@ -808,7 +808,7 @@ def _add_dedup_filter_parser(
     parser.add_argument(
         "-b",
         "--gene-bed",
-        help="Input all-isoform gene BED. Overrides species/version lookup.",
+        help="Input all-isoform GeneBED. Overrides species/version lookup.",
     )
     method_help = "Selection method: longcol5, long, peak, isoID, isoexp, or perover."
     if name == "dedup-bed":
@@ -875,7 +875,7 @@ def _add_feature_generation_arguments(
             "-o",
             "--output-dir",
             default=".",
-            help="Directory for generated gene and feature BED files.",
+        help="Directory for generated GeneBED and FeatureBED files.",
         )
     parser.add_argument("-g", "--gtf-path", help="Use an existing local GTF.")
     parser.add_argument("-u", "--url", help="Override the default GTF URL.")
@@ -896,13 +896,13 @@ def _add_feature_generation_arguments(
     )
     parser.add_argument(
         "-j", "--processes", type=int, default=1,
-        help="Number of worker processes for GTF/BED and feature generation.",
+        help="Number of worker processes for GTF/GeneBED and FeatureBED generation.",
     )
     parser.add_argument(
         "-b",
         "--gene-bed",
         help=(
-            "Use an existing gene BED for TSS-flank files instead of converting "
+            "Use an existing GeneBED for TSS-flank files instead of converting "
             "one from the GTF."
         ),
     )

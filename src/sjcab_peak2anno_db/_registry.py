@@ -1,4 +1,4 @@
-"""Registry helpers for bundled and installed gene BED resources."""
+"""Registry helpers for bundled and installed GeneBED resources."""
 
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ class AnnotationResource:
 
     @property
     def is_derived(self) -> bool:
-        """Whether the annotation is generated from a bundled gene BED."""
+        """Whether the annotation is generated from a bundled GeneBED."""
 
         return self.isoform_set != "all" or self.annotation != "gene"
 
@@ -254,7 +254,7 @@ def path(
 
     This returns the installed user copy when present, otherwise the bundled
     package file. Use :func:`write_tss` and :func:`write_tes` to derive site
-    annotations from a gene BED when needed.
+            annotations from a GeneBED when needed.
     """
 
     entry = _resolve(species, annotation, version, isoform_set)

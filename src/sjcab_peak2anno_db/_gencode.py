@@ -1183,7 +1183,7 @@ def convert_gencode_gtf_to_bed(
     gene_types: Optional[Iterable[str]] = None,
     processes: int = 1,
 ) -> Path:
-    """Convert a GENCODE GTF to a transcript-level gene BED file.
+    """Convert a GENCODE GTF to a transcript-level GeneBED file.
 
     The default output matches files such as
     ``gencode.v31.hg38.gene.bed.withtype``:

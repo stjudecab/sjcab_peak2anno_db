@@ -1,4 +1,4 @@
-# Feature BEDs
+# FeatureBEDs
 
 Feature resources are merged CAB-style regions derived from a GTF and gene
 BED. The default output prefix is the promoter size, normally `2kb`.
@@ -22,7 +22,7 @@ Main options:
 - `--distal-bp`/`-D`: distal flank, default `50kb`.
 - `--tes-bp`/`-e`: TES flank, default `2kb`.
 - `--prefix`/`-P`: output prefix.
-- `--gene-bed`/`-b`: existing gene BED.
+- `--gene-bed`/`-b`: existing GeneBED.
 - `--gtf-path`/`-g`: existing local GTF.
 - `--processes`/`-j`: parallel conversion and feature-file writing.
 

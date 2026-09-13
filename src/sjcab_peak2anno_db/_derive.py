@@ -1,4 +1,4 @@
-"""Generate derived annotation BED files from bundled gene BED files."""
+"""Generate derived annotation BED files from bundled GeneBED files."""
 
 from __future__ import annotations
 
@@ -9,13 +9,13 @@ PathLike = Union[str, Path]
 
 
 def write_tss(gene_bed: PathLike, output_bed: PathLike) -> Path:
-    """Write 1 bp TSS intervals from a gene BED file."""
+    """Write 1 bp TSS intervals from a GeneBED file."""
 
     return _write_site(gene_bed, output_bed, site="tss")
 
 
 def write_tes(gene_bed: PathLike, output_bed: PathLike) -> Path:
-    """Write 1 bp TES intervals from a gene BED file."""
+    """Write 1 bp TES intervals from a GeneBED file."""
 
     return _write_site(gene_bed, output_bed, site="tes")
 
@@ -62,7 +62,7 @@ def write_derived(
     output_bed: PathLike,
     gene_key: str = "symbol",
 ) -> Path:
-    """Write one derived annotation type from a gene BED file."""
+    """Write one derived annotation type from a GeneBED file."""
 
     annotation = annotation.lower()
     if annotation == "tss":

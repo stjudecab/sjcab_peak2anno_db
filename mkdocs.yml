@@ -14,8 +14,8 @@ nav:
       - Installation and quick start: getting-started.md
       - Common options and configuration: configuration.md
   - Annotation resources:
-      - Genebed: genebed.md
-      - Feature BEDs: features.md
+      - GeneBEDs: genebeds.md
+      - FeatureBEDs: features.md
       - ChromHMM, Segway, and external resources: datasets.md
   - Selection and filtering:
       - Deduplication and selectors: deduplication.md
