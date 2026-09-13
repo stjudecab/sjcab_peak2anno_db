@@ -20,5 +20,6 @@ index.
 ## Resource URLs
 
 - [Roadmap metadata](https://egg2.wustl.edu/roadmap/web_portal/data.js)
+- [Roadmap ChromHMM core 15-state models](https://egg2.wustl.edu/roadmap/web_portal/chr_state_learning.html#core_15state)
 - [Roadmap 15-state BED files](https://egg2.wustl.edu/roadmap/data/byFileType/)
 - [UCSC hg38 liftOver chains](https://hgdownload.soe.ucsc.edu/goldenPath/hg38/liftOver/)

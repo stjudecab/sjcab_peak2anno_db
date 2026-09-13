@@ -125,12 +125,10 @@ after BED generation. A negative value removes the newly used cached GTF
 immediately. The command-line form is `--clean-cache [DAYS]`; using
 `--clean-cache` without a value means immediate cleanup.
 
-`PEAK_TXT_DELIMITER` controls the delimiters accepted inside text-mode peak
-regions such as `chr_100-200`; its commented default is `:`, `-`, `*`, `=`,
-`/`, `^`, `;`, `_`, `%`, `$`, and `,`. Selector files are auto-detected as BED
-or text: BED rows use the configured fifth-column score, while text rows use
-the configured second-column score. Override these with `BED_SCORE_COLUMN` and
-`TXT_SCORE_COLUMN` in the environment or RC file.
+`PEAK_TXT_DELIMITER` controls delimiters inside text-mode peak regions. Selector
+files are auto-detected as BED or text: BED rows use the configured fifth-column
+score, while text rows use the configured second-column score. Override these
+with `BED_SCORE_COLUMN` and `TXT_SCORE_COLUMN` in the environment or RC file.
 
 ## GeneBEDs
 

@@ -56,8 +56,7 @@ SJCAB_PEAK2ANNO_DB_TXT_SCORE_COLUMN=2
 catalogues. `SIZESCLEAN=0` disables `.sizes.clean`; `CLEANCACHE` controls cache
 cleanup age. Explicit command-line options take precedence.
 
-`PEAK_TXT_DELIMITER` controls delimiters inside text-mode `peak` regions, such
-as `chr_100-200`; it is not a command-line option. Its default delimiters are
-`:`, `-`, `*`, `=`, `/`, `^`, `;`, `_`, `%`, `$`, and `,`. Selector format is
-auto-detected: BED rows use the configured `BED_SCORE_COLUMN` (default `5`),
-while text rows use `TXT_SCORE_COLUMN` (default `2`).
+`PEAK_TXT_DELIMITER` controls delimiters inside text-mode `peak` regions; it is
+not a command-line option. Selector format is auto-detected: BED rows use the
+configured `BED_SCORE_COLUMN` (default `5`), while text rows use
+`TXT_SCORE_COLUMN` (default `2`).
