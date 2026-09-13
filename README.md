@@ -126,9 +126,10 @@ immediately. The command-line form is `--clean-cache [DAYS]`; using
 `--clean-cache` without a value means immediate cleanup.
 
 `PEAK_TXT_DELIMITER` controls delimiters inside text-mode peak regions. Selector
-files are auto-detected as BED or text: BED rows use the configured fifth-column
-score, while text rows use the configured second-column score. Override these
-with `BED_SCORE_COLUMN` and `TXT_SCORE_COLUMN` in the environment or RC file.
+files are auto-detected once per file from the first data row: BED selectors use
+the configured fifth-column score, while text selectors use the configured
+second-column score. Override these with `BED_SCORE_COLUMN` and
+`TXT_SCORE_COLUMN` in the environment or RC file.
 
 ## GeneBEDs
 

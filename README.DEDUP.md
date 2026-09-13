@@ -23,9 +23,10 @@
 - `--exclusive` requires exact transcript ID matches for `isoID`/`isoexp` and
   BED features fully contained inside the promoter for `peak`/`perover`.
 - Text `peak`/`perover` selectors may have a header or no header.
-- Selector format is auto-detected. BED rows use column 5 as the score and text
-  rows use column 2; configure these with `SJCAB_PEAK2ANNO_DB_BED_SCORE_COLUMN`
-  and `SJCAB_PEAK2ANNO_DB_TXT_SCORE_COLUMN`.
+- Selector format is auto-detected once per file from its first data row. BED
+  selectors use column 5 as the score and text selectors use column 2; configure
+  these with `SJCAB_PEAK2ANNO_DB_BED_SCORE_COLUMN` and
+  `SJCAB_PEAK2ANNO_DB_TXT_SCORE_COLUMN`.
 - `SJCAB_PEAK2ANNO_DB_PEAK_TXT_DELIMITER` controls delimiters inside text-mode
   peak regions such as `chr_100-200`. This setting is available in the RC file
   or environment and is not a command-line option.

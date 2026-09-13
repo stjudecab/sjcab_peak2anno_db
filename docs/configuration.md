@@ -79,6 +79,6 @@ catalogues. `SIZESCLEAN=0` disables `.sizes.clean`; `CLEANCACHE` controls cache
 cleanup age. Explicit command-line options take precedence.
 
 `PEAK_TXT_DELIMITER` controls delimiters inside text-mode `peak` regions; it is
-not a command-line option. Selector format is auto-detected: BED rows use the
-configured `BED_SCORE_COLUMN` (default `5`), while text rows use
-`TXT_SCORE_COLUMN` (default `2`).
+not a command-line option. Selector format is auto-detected once per file from
+the first data row: BED selectors use the configured `BED_SCORE_COLUMN`
+(default `5`), while text selectors use `TXT_SCORE_COLUMN` (default `2`).

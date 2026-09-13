@@ -443,10 +443,13 @@ def _read_scored_bed(
     bed_path: PathLike,
 ) -> Mapping[str, List[Tuple[int, int, float]]]:
     scored = {}  # type: Dict[str, List[Tuple[int, int, float]]]
-    for line_number, fields in _iter_selector_fields(bed_path):
+    rows, is_bed = _read_selector_rows(bed_path)
+    for line_number, fields in rows:
         try:
-            chrom, start, end = _selector_coordinates(fields, bed_path, line_number)
-            if _is_bed_row(fields):
+            chrom, start, end = _selector_coordinates(
+                fields, bed_path, line_number, is_bed
+            )
+            if is_bed:
                 score = _column_score(
                     fields, configured_bed_score_column(), bed_path, line_number
                 )
@@ -469,9 +472,12 @@ def _read_bed(
     bed_path: PathLike,
 ) -> Mapping[str, List[Tuple[int, int]]]:
     intervals = {}  # type: Dict[str, List[Tuple[int, int]]]
-    for line_number, fields in _iter_selector_fields(bed_path):
+    rows, is_bed = _read_selector_rows(bed_path)
+    for line_number, fields in rows:
         try:
-            chrom, start, end = _selector_coordinates(fields, bed_path, line_number)
+            chrom, start, end = _selector_coordinates(
+                fields, bed_path, line_number, is_bed
+            )
         except (IndexError, ValueError) as exc:
             raise ValueError(
                 "{}:{} has invalid interval.".format(bed_path, line_number)
@@ -479,6 +485,13 @@ def _read_bed(
         if end > start:
             intervals.setdefault(chrom, []).append((start, end))
     return _sort_interval_map(intervals)
+
+
+def _read_selector_rows(
+    selector: PathLike,
+) -> Tuple[List[Tuple[int, List[str]]], bool]:
+    rows = list(_iter_selector_fields(selector))
+    return rows, bool(rows and _is_bed_row(rows[0][1]))
 
 
 def _iter_selector_fields(selector: PathLike) -> Iterable[Tuple[int, List[str]]]:
@@ -522,8 +535,9 @@ def _selector_coordinates(
     fields: Sequence[str],
     selector: PathLike,
     line_number: int,
+    is_bed: bool,
 ) -> Tuple[str, int, int]:
-    if _is_bed_row(fields):
+    if is_bed:
         try:
             return fields[0], int(fields[1]), int(fields[2])
         except ValueError:

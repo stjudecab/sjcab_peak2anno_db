@@ -26,9 +26,10 @@ The promoter half-window defaults to `2kb` and can be changed with
 contained BED features.
 
 Use `--promoter-down` to set a separate downstream promoter window; it defaults
-to `--promoter-bp`. Selector files are auto-detected as BED or text. BED rows
-use score column 5 and text rows use score column 2 by default. Configure the
-columns with `SJCAB_PEAK2ANNO_DB_BED_SCORE_COLUMN` and
+to `--promoter-bp`. Selector files are auto-detected once per file from the
+first data row. BED selectors use score column 5 and text selectors use score
+column 2 by default. Configure the columns with
+`SJCAB_PEAK2ANNO_DB_BED_SCORE_COLUMN` and
 `SJCAB_PEAK2ANNO_DB_TXT_SCORE_COLUMN`. Configure delimiters inside text-mode
 peak regions with `SJCAB_PEAK2ANNO_DB_PEAK_TXT_DELIMITER`.
 
