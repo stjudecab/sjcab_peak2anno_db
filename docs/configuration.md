@@ -52,6 +52,28 @@ SJCAB_PEAK2ANNO_DB_BED_SCORE_COLUMN=5
 SJCAB_PEAK2ANNO_DB_TXT_SCORE_COLUMN=2
 ```
 
+### Environment variable defaults
+
+Unless overridden by a command-line option or configuration file, the
+environment variables use these defaults:
+
+| Variable | Default |
+| --- | --- |
+| `SJCAB_PEAK2ANNO_DB_PATH` | `~/.sjcab_peak2anno_db` |
+| `SJCAB_PEAK2ANNO_DB_INSTALL_OPTIONS` | `genebed,feature,blacklists,cgi` |
+| `SJCAB_PEAK2ANNO_DB_INSTALL_SPECIES` | `hg38,hg19,mm10,mm39` |
+| `SJCAB_PEAK2ANNO_DB_INSTALL_VERSIONS` | `v31,v31lift37,vM22,vM39` |
+| `SJCAB_PEAK2ANNO_DB_VERSION_STALE_DAYS` | `90` days |
+| `SJCAB_PEAK2ANNO_DB_SIZESCLEAN` | `1` (create `.sizes.clean`) |
+| `SJCAB_PEAK2ANNO_DB_CLEANCACHE` | `90` days |
+| `SJCAB_PEAK2ANNO_DB_PEAK_TXT_DELIMITER` | `:-*=/^;_%$,` |
+| `SJCAB_PEAK2ANNO_DB_BED_SCORE_COLUMN` | `5` |
+| `SJCAB_PEAK2ANNO_DB_TXT_SCORE_COLUMN` | `2` |
+
+`SJCAB_PEAK2ANNO_CONFIG` has no fixed filename default; when unset, the
+configuration search uses `$XDG_CONFIG_HOME/sjcab_peak2anno/.sjcab_peak2anno.rc`
+and then `~/.sjcab_peak2anno.rc`.
+
 `VERSION_STALE_DAYS` controls refresh of Ensembl `VERSION` and species
 catalogues. `SIZESCLEAN=0` disables `.sizes.clean`; `CLEANCACHE` controls cache
 cleanup age. Explicit command-line options take precedence.

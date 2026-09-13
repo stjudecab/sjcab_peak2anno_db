@@ -107,6 +107,25 @@ SJCAB_PEAK2ANNO_DB_BED_SCORE_COLUMN=5
 SJCAB_PEAK2ANNO_DB_TXT_SCORE_COLUMN=2
 ```
 
+Environment variable defaults are:
+
+| Variable | Default |
+| --- | --- |
+| `SJCAB_PEAK2ANNO_DB_PATH` | `~/.sjcab_peak2anno_db` |
+| `SJCAB_PEAK2ANNO_DB_INSTALL_OPTIONS` | `genebed,feature,blacklists,cgi` |
+| `SJCAB_PEAK2ANNO_DB_INSTALL_SPECIES` | `hg38,hg19,mm10,mm39` |
+| `SJCAB_PEAK2ANNO_DB_INSTALL_VERSIONS` | `v31,v31lift37,vM22,vM39` |
+| `SJCAB_PEAK2ANNO_DB_VERSION_STALE_DAYS` | `90` days |
+| `SJCAB_PEAK2ANNO_DB_SIZESCLEAN` | `1` (create `.sizes.clean`) |
+| `SJCAB_PEAK2ANNO_DB_CLEANCACHE` | `90` days |
+| `SJCAB_PEAK2ANNO_DB_PEAK_TXT_DELIMITER` | `:-*=/^;_%$,` |
+| `SJCAB_PEAK2ANNO_DB_BED_SCORE_COLUMN` | `5` |
+| `SJCAB_PEAK2ANNO_DB_TXT_SCORE_COLUMN` | `2` |
+
+`SJCAB_PEAK2ANNO_CONFIG` defaults to the XDG RC path when unset:
+`$XDG_CONFIG_HOME/sjcab_peak2anno/.sjcab_peak2anno.rc`, followed by
+`~/.sjcab_peak2anno.rc`.
+
 RC keys use the same names as the environment variables; the
 `SJCAB_PEAK2ANNO_DB_` prefix is optional for backwards-compatible short keys.
 `SJCAB_PEAK2ANNO_DB_PATH` sets the default data directory. `INSTALL_OPTIONS`
