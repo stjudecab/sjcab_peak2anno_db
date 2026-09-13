@@ -19,8 +19,11 @@ under a custom name and records the assembly-to-name mapping in
 Main options:
 
 - `--promoter-bp`/`-p`: promoter flank, default `2kb`.
+- `--promoter-down`: downstream promoter flank; defaults to `--promoter-bp`.
 - `--distal-bp`/`-D`: distal flank, default `50kb`.
+- `--distal-down`: downstream distal flank; defaults to `--distal-bp`.
 - `--tes-bp`/`-e`: TES flank, default `2kb`.
+- `--tes-up`: upstream TES flank; defaults to `--tes-bp`.
 - `--prefix`/`-P`: output prefix.
 - `--gene-bed`/`-b`: existing GeneBED.
 - `--gtf-path`/`-g`: existing local GTF.

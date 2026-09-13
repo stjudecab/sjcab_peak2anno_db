@@ -59,6 +59,8 @@ Common option styles:
   lists are paired in order.
 - `-d`, `--db-path DIR`: override the database/cache directory for commands
   that read or install the database.
+- `-name NAME`: store the selected GeneBEDs or FeatureBEDs under a custom
+  species name and record the assembly-to-name mapping in `custom.name.tsv`.
 - `-o`, `--output-dir DIR`: select a staging/output directory for download
   commands. Default for `download-*` use working directory as default.
 - `-n`, `--no-overwrite`: preserve existing files. `--overwrite` rewrites them
@@ -70,7 +72,7 @@ Common option styles:
 - `--sizes-clean [0|1]`: create `.sizes.clean` files by default. Use
   `--sizes-clean 0` to disable them. 
 - `-j`, `--processes N`: use `N` worker processes for GTF-to-GeneBED
-  conversion and FeatureBED generation. Default is `1`.
+  conversion and FeatureBED generation. Default is `4`.
 - `-g`, `--gtf-path FILE`: use an existing local GTF instead of downloading
   one.
 - `-u`, `--url URL`: override the resolved GTF URL.
@@ -100,6 +102,9 @@ SJCAB_PEAK2ANNO_DB_INSTALL_VERSIONS=v31,v31lift37,vM22,vM39
 SJCAB_PEAK2ANNO_DB_VERSION_STALE_DAYS=90
 SJCAB_PEAK2ANNO_DB_SIZESCLEAN=1
 SJCAB_PEAK2ANNO_DB_CLEANCACHE=90
+SJCAB_PEAK2ANNO_DB_TXT_DELIMITER=\s+
+SJCAB_PEAK2ANNO_DB_BED_SCORE_COLUMN=5
+SJCAB_PEAK2ANNO_DB_TXT_SCORE_COLUMN=2
 ```
 
 RC keys use the same names as the environment variables; the
@@ -119,6 +124,12 @@ in days: the default is `90`, so cache files older than 90 days are removed
 after BED generation. A negative value removes the newly used cached GTF
 immediately. The command-line form is `--clean-cache [DAYS]`; using
 `--clean-cache` without a value means immediate cleanup.
+
+`TXT_DELIMITER` controls splitting of text selector rows for `peak` and
+`perover`; its commented default is whitespace (`\s+`). Selector files are
+auto-detected as BED or text: BED rows use the configured fifth-column score,
+while text rows use the configured second-column score. Override these with
+`BED_SCORE_COLUMN` and `TXT_SCORE_COLUMN` in the environment or RC file.
 
 ## GeneBEDs
 
@@ -140,6 +151,7 @@ sjcab-peak2anno-db install-genebed
 sjcab-peak2anno-db install-genebed mm10 vM22 -g gencode.vM22.annotation.gtf.gz
 sjcab-peak2anno-db install-genebed cat
 sjcab-peak2anno-db install-genebed dog 100
+sjcab-peak2anno-db install-genebed hg38 -name human
 sjcab-peak2anno-db download-genebed hg38 v31 -o annotations
 sjcab-peak2anno-db download-genebed hg19 v31lift37 -o annotations
 ```
@@ -284,6 +296,9 @@ For `install-feature`, omitting the version is equivalent to using `def`.
 The `-name` mapping is written to `custom.name.tsv` in the selected data
 directory.
 
+`-name` also works with `install-genebed` and stores the selected GeneBEDs
+under the custom species directory.
+
 `install-feature -o DIR` reuses preprocessed feature files from `DIR`
 when `order.lst` and the expected FeatureBED files are already present. Like
 `download-genebed`, feature generation reuses the cached GTF, then an expected GTF
@@ -340,8 +355,11 @@ intergenic
 Main feature parameters:
 
 - `--promoter-bp`/`-p`: promoter flank size, default `2kb`.
+- `--promoter-down`: downstream promoter flank; defaults to `--promoter-bp`.
 - `--distal-bp`/`-D`: distal flank size, default `50kb`.
+- `--distal-down`: downstream distal flank; defaults to `--distal-bp`.
 - `--tes-bp`/`-e`: TES flank size, default `2kb`.
+- `--tes-up`: upstream TES flank; defaults to `--tes-bp`.
 - `--prefix`/`-P`: output prefix, default is the promoter size label.
 - `--gene-bed`/`-b`: use an existing GeneBED for region generation.
 - `--gtf-path`/`-g`: use an existing local GTF.

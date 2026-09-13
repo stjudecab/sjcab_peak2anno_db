@@ -132,7 +132,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="Clean cache files older than DAYS (default 90); negative means immediately.",
     )
     install_parser.add_argument(
-        "-j", "--processes", type=int, default=1,
+        "-j", "--processes", type=int, default=4,
         help="Number of worker processes for GTF/GeneBED and FeatureBED generation.",
     )
     install_parser.add_argument(
@@ -259,6 +259,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     bed_install_parser.add_argument("species", nargs="?", help="Species/build to install.")
     bed_install_parser.add_argument("-d", "--db-path", dest="data_dir", help="Generated annotation directory.")
+    bed_install_parser.add_argument(
+        "-name",
+        dest="name",
+        help="Customize the installed GeneBED species name and record it in custom.name.tsv.",
+    )
     bed_overwrite_group = bed_install_parser.add_mutually_exclusive_group()
     bed_overwrite_group.add_argument(
         "-n",
@@ -358,7 +363,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="Do not rewrite existing GTF or BED files.",
     )
     gencode_parser.add_argument(
-        "-j", "--processes", type=int, default=1,
+        "-j", "--processes", type=int, default=4,
         help="Number of worker processes for GTF-to-GeneBED conversion.",
     )
 
@@ -502,6 +507,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 prefix=args.prefix,
                 split_tss=not args.include_tss_base,
                 tes_bp=args.tes_bp,
+                promoter_down_bp=args.promoter_down_bp,
+                distal_down_bp=args.distal_down_bp,
+                tes_up_bp=args.tes_up_bp,
                 progress=_stderr_progress,
                 custom_name=args.name,
                 clean_cache=args.clean_cache,
@@ -514,6 +522,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             target = install_gencode_beds(
                 data_dir=args.data_dir,
                 overwrite=args.overwrite,
+                species=args.species,
+                custom_name=args.name,
             )
             print(target)
             return 0
@@ -598,6 +608,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     prefix=args.prefix,
                     split_tss=not args.include_tss_base,
                     tes_bp=args.tes_bp,
+                    promoter_down_bp=args.promoter_down_bp,
+                    distal_down_bp=args.distal_down_bp,
+                    tes_up_bp=args.tes_up_bp,
                     overwrite=not args.no_overwrite,
                     progress=_stderr_progress,
                     cache_dir=args.data_dir,
@@ -634,6 +647,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 version=args.version_option or args.version,
                 data_dir=args.data_dir,
                 promoter_bp=args.promoter_bp,
+                promoter_down_bp=args.promoter_down_bp,
                 inclusive=not args.exclusive,
                 output_prefix=args.prefix,
                 gene_key=args.gene_key,
@@ -840,6 +854,12 @@ def _add_dedup_filter_parser(
         help="Promoter half-window around TSS for peak/perover. Defaults to 2kb.",
     )
     parser.add_argument(
+        "--promoter-down",
+        "--promoter-down-bp",
+        dest="promoter_down_bp",
+        help="Promoter downstream window; defaults to --promoter-bp.",
+    )
+    parser.add_argument(
         "-P",
         "--prefix",
         help=(
@@ -895,7 +915,7 @@ def _add_feature_generation_arguments(
         help="Create .sizes.clean files (default); use --sizes-clean 0 to disable.",
     )
     parser.add_argument(
-        "-j", "--processes", type=int, default=1,
+        "-j", "--processes", type=int, default=4,
         help="Number of worker processes for GTF/GeneBED and FeatureBED generation.",
     )
     parser.add_argument(
@@ -913,16 +933,34 @@ def _add_feature_generation_arguments(
         help="Promoter flank size, for example 2kb or 2000.",
     )
     parser.add_argument(
+        "--promoter-down",
+        "--promoter-down-bp",
+        dest="promoter_down_bp",
+        help="Promoter downstream flank; defaults to --promoter-bp.",
+    )
+    parser.add_argument(
         "-D",
         "--distal-bp",
         default="50kb",
         help="Distal flank size, for example 50kb or 50000.",
     )
     parser.add_argument(
+        "--distal-down",
+        "--distal-down-bp",
+        dest="distal_down_bp",
+        help="TES downstream distal flank; defaults to --distal-bp.",
+    )
+    parser.add_argument(
         "-e",
         "--tes-bp",
         default="2kb",
         help="TES flank size for tes.bed, for example 2kb or 2000.",
+    )
+    parser.add_argument(
+        "--tes-up",
+        "--tes-up-bp",
+        dest="tes_up_bp",
+        help="TES upstream flank; defaults to --tes-bp.",
     )
     parser.add_argument(
         "-P",

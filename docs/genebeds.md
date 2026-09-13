@@ -14,6 +14,7 @@ sjcab-peak2anno-db install-genebed
 sjcab-peak2anno-db install-genebed mm10 vM22 -g gencode.vM22.annotation.gtf.gz
 sjcab-peak2anno-db download-genebed hg38 v31 -o annotations
 sjcab-peak2anno-db download-genebed hg19 v31lift37 -o annotations
+sjcab-peak2anno-db install-genebed hg38 -name human
 ```
 
 For Ensembl, `def`, `default`, `current`, and `latest` resolve the current
@@ -24,6 +25,8 @@ release. Vertebrate and Ensembl Genomes catalogues are cached by release;
 For UCSC builds, GTF metadata and liftOver chain URLs are cached in
 `{db-path}/ucsc/gtf_builds.tsv`. Sizes files use the assembly name whenever
 possible; `.sizes.clean` uses primary chromosomes from the assembly report.
+Use `-name` with `install-genebed` to store a selected GeneBED set under a
+custom species name; the mapping is recorded in `custom.name.tsv`.
 
 ## Layout
 

@@ -9,6 +9,11 @@ from pathlib import Path
 from typing import Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 
 from ._derive import _length, _parse_bed_fields, _site_interval, write_tes, write_tss
+from ._config import (
+    configured_bed_score_column,
+    configured_txt_delimiter,
+    configured_txt_score_column,
+)
 from ._registry import default_version as registry_default_version
 from ._registry import path as registry_path
 
@@ -45,6 +50,7 @@ def dedup_gencode_bed(
     inclusive: bool = True,
     output_prefix: Optional[str] = None,
     gene_key: str = "symbol",
+    promoter_down_bp: Optional[Union[int, str]] = None,
 ) -> Mapping[str, Path]:
     """Keep one isoform per gene based on a selector file.
 
@@ -64,6 +70,7 @@ def dedup_gencode_bed(
         version=version,
         data_dir=data_dir,
         promoter_bp=promoter_bp,
+        promoter_down_bp=promoter_down_bp,
         inclusive=inclusive,
         output_prefix=output_prefix,
         gene_key=gene_key,
@@ -84,6 +91,7 @@ def filter_gencode_bed(
     inclusive: bool = True,
     output_prefix: Optional[str] = None,
     gene_key: str = "symbol",
+    promoter_down_bp: Optional[Union[int, str]] = None,
 ) -> Mapping[str, Path]:
     """Keep one isoform per gene and omit genes with no selector support."""
 
@@ -96,6 +104,7 @@ def filter_gencode_bed(
         version=version,
         data_dir=data_dir,
         promoter_bp=promoter_bp,
+        promoter_down_bp=promoter_down_bp,
         inclusive=inclusive,
         output_prefix=output_prefix,
         gene_key=gene_key,
@@ -113,6 +122,7 @@ def _select_gencode_bed(
     version: Optional[str],
     data_dir: Optional[PathLike],
     promoter_bp: Union[int, str],
+    promoter_down_bp: Optional[Union[int, str]],
     inclusive: bool,
     output_prefix: Optional[str],
     gene_key: str,
@@ -130,6 +140,9 @@ def _select_gencode_bed(
     records = _read_gene_bed(gene_bed_path, key_mode)
     records_by_gene = _group_by_gene(records)
     promoter = _parse_bp(promoter_bp)
+    promoter_down = _parse_bp(
+        promoter_bp if promoter_down_bp is None else promoter_down_bp
+    )
 
     if selected_method == "longcol5":
         scores = _score_length(records, use_column_five=True)
@@ -138,11 +151,11 @@ def _select_gencode_bed(
     elif selected_method == "peak":
         if selector is None:
             raise ValueError("peak requires a selector file.")
-        scores = _score_peak(records, selector, promoter, inclusive)
+        scores = _score_peak(records, selector, promoter, promoter_down, inclusive)
     elif selected_method == "perover":
         if selector is None:
             raise ValueError("perover requires a selector file.")
-        scores = _score_perover(records, selector, promoter, inclusive)
+        scores = _score_perover(records, selector, promoter, promoter_down, inclusive)
     elif selected_method == "isoID":
         if selector is None:
             raise ValueError("isoID requires a selector file.")
@@ -348,12 +361,13 @@ def _score_peak(
     records: Sequence[_IsoformRecord],
     selector: PathLike,
     promoter_bp: int,
+    promoter_down_bp: int,
     inclusive: bool,
 ) -> Mapping[int, float]:
     intervals_by_chrom = _read_scored_bed(selector)
     scores = {}  # type: Dict[int, float]
     for record in records:
-        promoter = _promoter_interval(record, promoter_bp)
+        promoter = _promoter_interval(record, promoter_bp, promoter_down_bp)
         values = [
             score
             for start, end, score in _candidate_intervals(
@@ -370,12 +384,13 @@ def _score_perover(
     records: Sequence[_IsoformRecord],
     selector: PathLike,
     promoter_bp: int,
+    promoter_down_bp: int,
     inclusive: bool,
 ) -> Mapping[int, float]:
     intervals_by_chrom = _read_bed(selector)
     scores = {}  # type: Dict[int, float]
     for record in records:
-        promoter = _promoter_interval(record, promoter_bp)
+        promoter = _promoter_interval(record, promoter_bp, promoter_down_bp)
         pieces = []
         for start, end in _candidate_intervals(intervals_by_chrom, record.chrom, promoter):
             if not _overlaps(promoter, (start, end), inclusive):
@@ -416,9 +431,15 @@ def _overlaps(
     return interval_start >= query_start and interval_end <= query_end
 
 
-def _promoter_interval(record: _IsoformRecord, promoter_bp: int) -> Tuple[int, int]:
+def _promoter_interval(
+    record: _IsoformRecord,
+    promoter_bp: int,
+    promoter_down_bp: int,
+) -> Tuple[int, int]:
     tss = int(_site_interval(list(record.fields), "tss")[0])
-    return max(0, tss - promoter_bp), tss + promoter_bp + 1
+    if record.strand == "-":
+        return max(0, tss - promoter_down_bp), tss + promoter_bp + 1
+    return max(0, tss - promoter_bp), tss + promoter_down_bp + 1
 
 
 def _read_scored_bed(
@@ -428,11 +449,14 @@ def _read_scored_bed(
     for line_number, fields in _iter_selector_fields(bed_path):
         try:
             chrom, start, end = _selector_coordinates(fields, bed_path, line_number)
-            score = (
-                float(fields[4])
-                if len(fields) >= 5 and _is_bed_row(fields)
-                else _text_score(fields)
-            )
+            if _is_bed_row(fields):
+                score = _column_score(
+                    fields, configured_bed_score_column(), bed_path, line_number
+                )
+            else:
+                score = _column_score(
+                    fields, configured_txt_score_column(), bed_path, line_number
+                )
         except (IndexError, ValueError) as exc:
             raise ValueError(
                 "{}:{} has invalid interval or peak score.".format(
@@ -466,7 +490,7 @@ def _iter_selector_fields(selector: PathLike) -> Iterable[Tuple[int, List[str]]]
         for line_number, line in enumerate(handle, start=1):
             if not line.strip() or line.startswith("#"):
                 continue
-            fields = line.rstrip("\n").split("\t") if "\t" in line else line.split()
+            fields = _split_selector_fields(line)
             if not header_skipped and not _looks_like_interval(fields):
                 header_skipped = True
                 continue
@@ -525,6 +549,42 @@ def _text_score(fields: Sequence[str]) -> float:
         except ValueError:
             continue
     return 1.0
+
+
+def _split_selector_fields(line: str) -> List[str]:
+    stripped = line.strip()
+    if "\t" in stripped:
+        return stripped.split("\t")
+    whitespace_fields = stripped.split()
+    if _looks_like_interval(whitespace_fields):
+        return whitespace_fields
+    delimiter = configured_txt_delimiter()
+    if delimiter.lower() in {"space", "whitespace", r"\s+"}:
+        return stripped.split()
+    if delimiter.lower() in {"tab", r"\t"}:
+        return stripped.split("\t")
+    try:
+        return [field for field in re.split(delimiter, stripped) if field]
+    except re.error as exc:
+        raise ValueError(
+            "SJCAB_PEAK2ANNO_DB_TXT_DELIMITER is not a valid regular expression."
+        ) from exc
+
+
+def _column_score(
+    fields: Sequence[str],
+    column: int,
+    selector: PathLike,
+    line_number: int,
+) -> float:
+    try:
+        return float(fields[column - 1])
+    except (IndexError, ValueError) as exc:
+        raise ValueError(
+            "{}:{} has no numeric score in configured column {}.".format(
+                selector, line_number, column
+            )
+        ) from exc
 
 
 def _sort_interval_map(intervals_by_chrom: Mapping[str, List[Tuple]]) -> Mapping:

@@ -25,7 +25,6 @@ from ._registry import (
     AnnotationResource,
     DATA_PATH_ENV_VAR,
     default_version,
-    installed_path,
     iter_resources,
     resource,
     user_data_dir,
@@ -56,7 +55,7 @@ def install_data(
     ucsc_annotation: str = "ens",
     clean_cache: Optional[Union[bool, int]] = None,
     sizes_clean: Optional[bool] = None,
-    processes: int = 1,
+    processes: int = 4,
 ) -> Path:
     """Install selected resources into the user data directory.
 
@@ -121,28 +120,54 @@ def install_data(
 def install_gencode_beds(
     data_dir: Optional[object] = None,
     overwrite: bool = True,
+    species: Optional[str] = None,
+    custom_name: Optional[str] = None,
 ) -> Path:
     """Install bundled GENCODE BEDs and deduplicated gene annotations."""
 
     target_root = user_data_dir(data_dir)
     target_root.mkdir(parents=True, exist_ok=True)
+    if custom_name and not species:
+        raise ValueError("A species/build is required when using custom_name.")
 
     gene_entries = [
         entry
         for entry in iter_resources()
         if entry.isoform_set == "all" and entry.annotation == "gene"
     ]
+    if species and species.lower() not in {"all", "empty", "default"}:
+        gene_entries = [
+            entry for entry in gene_entries if entry.species.lower() == species.lower()
+        ]
+    if not gene_entries:
+        raise ValueError("No bundled GeneBED resource found for {!r}.".format(species))
     for entry in gene_entries:
-        _install_gene(entry, target_root, overwrite=overwrite)
+        storage_species = custom_name or entry.species
+        _install_gene(
+            entry,
+            target_root,
+            overwrite=overwrite,
+            storage_species=storage_species,
+        )
+        if custom_name:
+            _write_custom_name_mapping(target_root, entry.species, custom_name)
 
     for entry in gene_entries:
-        _install_deduplong_gene(entry, target_root, overwrite=overwrite)
+        _install_deduplong_gene(
+            entry,
+            target_root,
+            overwrite=overwrite,
+            storage_species=custom_name or entry.species,
+        )
 
+    selected_species = {entry.species for entry in gene_entries}
     for entry in iter_resources():
+        if entry.species not in selected_species:
+            continue
         if entry.version == default_version(
             entry.species, entry.annotation, entry.isoform_set
         ):
-            _refresh_default(entry, target_root)
+            _refresh_default(entry, target_root, custom_name or entry.species)
 
     return target_root
 
@@ -168,7 +193,10 @@ def install_gencode_features(
     sizes_clean: Optional[bool] = None,
     custom_name: Optional[str] = None,
     collector_backend: str = "python",
-    processes: int = 1,
+    processes: int = 4,
+    promoter_down_bp: Optional[Union[int, str]] = None,
+    distal_down_bp: Optional[Union[int, str]] = None,
+    tes_up_bp: Optional[Union[int, str]] = None,
 ) -> Path:
     """Install bundled derived annotations and downloaded GENCODE features.
 
@@ -216,6 +244,9 @@ def install_gencode_features(
             custom_name=custom_name,
             collector_backend=collector_backend,
             processes=processes,
+            promoter_down_bp=promoter_down_bp,
+            distal_down_bp=distal_down_bp,
+            tes_up_bp=tes_up_bp,
             skip_existing=_can_skip_existing_feature_install(
                 source_dir=output_dir,
                 gtf_path=gtf_path,
@@ -256,7 +287,10 @@ def install_gencode_feature_set(
     sizes_clean: Optional[bool] = None,
     custom_name: Optional[str] = None,
     collector_backend: str = "python",
-    processes: int = 1,
+    processes: int = 4,
+    promoter_down_bp: Optional[Union[int, str]] = None,
+    distal_down_bp: Optional[Union[int, str]] = None,
+    tes_up_bp: Optional[Union[int, str]] = None,
 ) -> Path:
     """Install one downloaded GENCODE feature set into the cache."""
 
@@ -327,6 +361,9 @@ def install_gencode_feature_set(
                 data_species=storage_species,
                 collector_backend=collector_backend,
                 processes=processes,
+                promoter_down_bp=promoter_down_bp,
+                distal_down_bp=distal_down_bp,
+                tes_up_bp=tes_up_bp,
                 gene_bed_output=gene_bed_output,
             )
         _copy_preprocessed_feature_dir(
@@ -358,6 +395,9 @@ def install_gencode_feature_set(
             data_species=storage_species,
             collector_backend=collector_backend,
             processes=processes,
+            promoter_down_bp=promoter_down_bp,
+            distal_down_bp=distal_down_bp,
+            tes_up_bp=tes_up_bp,
             gene_bed_output=gene_bed_output,
         )
     if selected_gene_bed is None:
@@ -536,14 +576,17 @@ def _existing_installed_gene_bed(
 
 
 def _install_gene(
-    entry: AnnotationResource, target_root: Path, overwrite: bool
+    entry: AnnotationResource,
+    target_root: Path,
+    overwrite: bool,
+    storage_species: Optional[str] = None,
 ) -> Path:
-    destination = installed_path(
-        entry.species,
-        "gene",
-        entry.version,
-        data_dir=target_root,
-        isoform_set="all",
+    destination = (
+        user_data_dir(target_root)
+        / "bed"
+        / (storage_species or entry.species)
+        / entry.version
+        / "all.gene.bed"
     )
     if destination.exists() and not overwrite:
         return destination
@@ -557,31 +600,36 @@ def _install_deduplong_gene(
     gene_entry: AnnotationResource,
     target_root: Path,
     overwrite: bool,
+    storage_species: Optional[str] = None,
 ) -> Path:
-    destination = installed_path(
-        gene_entry.species,
-        "gene",
-        gene_entry.version,
-        data_dir=target_root,
-        isoform_set="deduplong",
+    storage_species = storage_species or gene_entry.species
+    destination = (
+        user_data_dir(target_root)
+        / "bed"
+        / storage_species
+        / gene_entry.version
+        / "deduplong.gene.bed"
     )
     if destination.exists() and not overwrite:
         return destination
 
-    gene_path = installed_path(
-        gene_entry.species,
-        "gene",
-        gene_entry.version,
-        data_dir=target_root,
-        isoform_set="all",
+    gene_path = (
+        user_data_dir(target_root)
+        / "bed"
+        / storage_species
+        / gene_entry.version
+        / "all.gene.bed"
     )
     write_deduplong(gene_path, destination)
     return destination
 
 
-def _refresh_default(entry: AnnotationResource, target_root: Path) -> None:
-    version_dir = user_data_dir(target_root) / "bed" / entry.species / entry.version
-    default_dir = user_data_dir(target_root) / "bed" / entry.species / "def"
+def _refresh_default(
+    entry: AnnotationResource, target_root: Path, storage_species: Optional[str] = None
+) -> None:
+    storage_species = storage_species or entry.species
+    version_dir = user_data_dir(target_root) / "bed" / storage_species / entry.version
+    default_dir = user_data_dir(target_root) / "bed" / storage_species / "def"
     _refresh_dir_link(default_dir, entry.version, version_dir, overwrite=True)
 
 

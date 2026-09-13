@@ -16,6 +16,8 @@
 
 - Promoter half-window for `peak` and `perover` is `2kb`; change with
   `--promoter-bp`/`-p`.
+- The downstream promoter window defaults to `--promoter-bp`; set it with
+  `--promoter-down` when the two sides should differ.
 - Matching is inclusive by default: versioned and unversioned transcript IDs can
   match each other, and any BED overlap counts.
 - `--exclusive` requires exact transcript ID matches for `isoID`/`isoexp` and
@@ -23,6 +25,12 @@
 - Text `peak`/`perover` selectors may have a header or no header. Region strings
   accept the common `sjcab_peak2anno` delimiters, including `:`, `-`, `_`, `/`,
   `;`, and `,`.
+- Selector format is auto-detected. BED rows use column 5 as the score and text
+  rows use column 2; configure these with `SJCAB_PEAK2ANNO_DB_BED_SCORE_COLUMN`
+  and `SJCAB_PEAK2ANNO_DB_TXT_SCORE_COLUMN`.
+- Text rows are split using `SJCAB_PEAK2ANNO_DB_TXT_DELIMITER`, whose default
+  is whitespace (`\s+`). This setting is available in the RC file or
+  environment and is not a command-line option.
 - Isoforms are grouped by gene symbol by default; use `--gene-key ensid` to
   group by Ensembl/GENCODE gene ID.
 - Species/version lookup writes prefixes such as

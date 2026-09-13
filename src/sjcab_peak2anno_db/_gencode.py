@@ -1181,7 +1181,7 @@ def convert_gencode_gtf_to_bed(
     gtf_path: PathLike,
     output_bed: PathLike,
     gene_types: Optional[Iterable[str]] = None,
-    processes: int = 1,
+    processes: int = 4,
 ) -> Path:
     """Convert a GENCODE GTF to a transcript-level GeneBED file.
 
@@ -1250,7 +1250,7 @@ def download_and_convert_gencode_gtf(
     cache_dir: Optional[PathLike] = None,
     ucsc_annotation: str = "ens",
     clean_cache: Optional[Union[bool, int]] = None,
-    processes: int = 1,
+    processes: int = 4,
 ) -> Path:
     """Download or reuse a GENCODE GTF and convert it to BED.
 
@@ -1339,7 +1339,7 @@ def regenerate_gencode_beds(
     output_dir: PathLike,
     specs: Iterable[Tuple[str, str, PathLike]],
     overwrite: bool = True,
-    processes: int = 1,
+    processes: int = 4,
 ) -> Tuple[Path, ...]:
     """Regenerate several GENCODE BED files from local GTF paths.
 

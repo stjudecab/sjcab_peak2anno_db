@@ -59,6 +59,8 @@ def write_tss_flank_region_unions(
     distal_bp: Union[int, str] = 50000,
     prefix: Optional[str] = None,
     split_tss: bool = True,
+    promoter_down_bp: Optional[Union[int, str]] = None,
+    distal_down_bp: Optional[Union[int, str]] = None,
 ) -> Mapping[str, Path]:
     """Write merged old-style promoter/distal FeatureBED classes from a GeneBED file.
 
@@ -71,6 +73,10 @@ def write_tss_flank_region_unions(
 
     promoter = _parse_bp(promoter_bp)
     distal = _parse_bp(distal_bp)
+    promoter_down = _parse_bp(
+        promoter_bp if promoter_down_bp is None else promoter_down_bp
+    )
+    distal_down = _parse_bp(distal if distal_down_bp is None else distal_down_bp)
     if promoter <= 0:
         raise ValueError("promoter_bp must be positive.")
     if distal <= promoter:
@@ -82,6 +88,8 @@ def write_tss_flank_region_unions(
         promoter,
         distal,
         split_tss=split_tss,
+        promoter_down=promoter_down,
+        distal_down=distal_down,
     )
 
     target_dir = Path(output_dir).expanduser()
@@ -161,7 +169,10 @@ def download_gencode_feature(
     sizes_clean: Optional[bool] = None,
     data_species: Optional[str] = None,
     collector_backend: str = "python",
-    processes: int = 1,
+    processes: int = 4,
+    promoter_down_bp: Optional[Union[int, str]] = None,
+    distal_down_bp: Optional[Union[int, str]] = None,
+    tes_up_bp: Optional[Union[int, str]] = None,
     *,
     gene_bed_output: Optional[PathLike] = None,
 ) -> Mapping[str, Path]:
@@ -224,8 +235,11 @@ def download_gencode_feature(
         gtf_for_regions,
         target_dir,
         promoter_bp=promoter_bp,
+        promoter_down_bp=promoter_down_bp,
         distal_bp=distal_bp,
+        distal_down_bp=distal_down_bp,
         tes_bp=tes_bp,
+        tes_up_bp=tes_up_bp,
         prefix=label,
         split_tss=split_tss,
         chrom_sizes=_resolve_species_chrom_sizes(
@@ -276,6 +290,9 @@ def download_gencode_tss_flank_region_unions(
     overwrite: bool = True,
     log_data_dir: Optional[PathLike] = None,
     progress: Optional[ProgressCallback] = None,
+    promoter_down_bp: Optional[Union[int, str]] = None,
+    distal_down_bp: Optional[Union[int, str]] = None,
+    tes_up_bp: Optional[Union[int, str]] = None,
 ) -> Mapping[str, Path]:
     """Backward-compatible alias for :func:`download_gencode_feature`."""
 
@@ -291,6 +308,9 @@ def download_gencode_tss_flank_region_unions(
         prefix=prefix,
         split_tss=split_tss,
         tes_bp=tes_bp,
+        promoter_down_bp=promoter_down_bp,
+        distal_down_bp=distal_down_bp,
+        tes_up_bp=tes_up_bp,
         overwrite=overwrite,
         log_data_dir=log_data_dir,
         progress=progress,
@@ -339,7 +359,10 @@ def write_legacy_gencode_feature_unions(
     chrom_sizes: Optional[PathLike] = None,
     backend: str = "auto",
     collector_backend: str = "python",
-    processes: int = 1,
+    processes: int = 4,
+    promoter_down_bp: Optional[Union[int, str]] = None,
+    distal_down_bp: Optional[Union[int, str]] = None,
+    tes_up_bp: Optional[Union[int, str]] = None,
 ) -> Mapping[str, Path]:
     """Write legacy CAB/``annotate_prep.sh`` FeatureBED classes.
 
@@ -358,8 +381,13 @@ def write_legacy_gencode_feature_unions(
     if processes < 1:
         raise ValueError("processes must be at least 1")
     promoter = _parse_bp(promoter_bp)
+    promoter_down = _parse_bp(
+        promoter_bp if promoter_down_bp is None else promoter_down_bp
+    )
     distal = _parse_bp(distal_bp)
+    distal_down = _parse_bp(distal if distal_down_bp is None else distal_down_bp)
     tes = _parse_bp(tes_bp)
+    tes_up = _parse_bp(tes if tes_up_bp is None else tes_up_bp)
     if promoter <= 0:
         raise ValueError("promoter_bp must be positive.")
     if distal <= promoter:
@@ -372,8 +400,11 @@ def write_legacy_gencode_feature_unions(
         gene_bed,
         gtf_path,
         promoter=promoter,
+        promoter_down=promoter_down,
         distal=distal,
+        distal_down=distal_down,
         tes=tes,
+        tes_up=tes_up,
         split_tss=split_tss,
         fallback_chrom_lengths=_read_chrom_sizes(chrom_sizes),
         backend=collector_backend,
@@ -917,8 +948,11 @@ def _collect_legacy_gencode_feature_regions(
     gene_bed: PathLike,
     gtf_path: PathLike,
     promoter: int,
+    promoter_down: int,
     distal: int,
+    distal_down: int,
     tes: int,
+    tes_up: int,
     split_tss: bool,
     fallback_chrom_lengths: Mapping[str, int],
     backend: str = "python",
@@ -928,8 +962,11 @@ def _collect_legacy_gencode_feature_regions(
             gene_bed,
             gtf_path,
             promoter,
+            promoter_down,
             distal,
+            distal_down,
             tes,
+            tes_up,
             split_tss,
             fallback_chrom_lengths,
             backend,
@@ -938,8 +975,11 @@ def _collect_legacy_gencode_feature_regions(
         gene_bed,
         gtf_path,
         promoter,
+        promoter_down,
         distal,
+        distal_down,
         tes,
+        tes_up,
         split_tss,
         fallback_chrom_lengths,
     )
@@ -949,8 +989,11 @@ def _collect_legacy_gencode_feature_regions_tool(
     gene_bed: PathLike,
     gtf_path: PathLike,
     promoter: int,
+    promoter_down: int,
     distal: int,
+    distal_down: int,
     tes: int,
+    tes_up: int,
     split_tss: bool,
     fallback_chrom_lengths: Mapping[str, int],
     backend: str,
@@ -990,8 +1033,11 @@ def _collect_legacy_gencode_feature_regions_tool(
             sorted_gene_bed,
             filtered_gtf,
             promoter,
+            promoter_down,
             distal,
+            distal_down,
             tes,
+            tes_up,
             split_tss,
             fallback_chrom_lengths,
             flank_backend="bedtools" if backend == "bedtools" else None,
@@ -1058,8 +1104,11 @@ def _collect_legacy_gencode_feature_regions_python(
     gene_bed: PathLike,
     gtf_path: PathLike,
     promoter: int,
+    promoter_down: int,
     distal: int,
+    distal_down: int,
     tes: int,
+    tes_up: int,
     split_tss: bool,
     fallback_chrom_lengths: Mapping[str, int],
     flank_backend: Optional[str] = None,
@@ -1097,15 +1146,22 @@ def _collect_legacy_gencode_feature_regions_python(
         chrom_lengths,
         chrom_max_end,
         promoter=promoter,
+        promoter_down=promoter_down,
         distal=distal,
+        distal_down=distal_down,
         tes=tes,
+        tes_up=tes_up,
         split_tss=split_tss,
         flank_intervals=(
             _bedtools_flank_intervals(
                 gene_bed,
                 chrom_lengths,
                 promoter,
+                promoter_down,
                 distal,
+                distal_down,
+                tes,
+                tes_up,
                 split_tss,
                 temporary_root,
             )
@@ -1231,8 +1287,11 @@ def _collect_legacy_gene_bed_regions(
     chrom_lengths: Mapping[str, int],
     chrom_max_end: Dict[str, int],
     promoter: int,
+    promoter_down: int,
     distal: int,
+    distal_down: int,
     tes: int,
+    tes_up: int,
     split_tss: bool,
     flank_intervals: Optional[Tuple[Dict[str, Dict[str, List[Tuple[int, int]]]], Dict[str, List[Tuple[int, int]]]]] = None,
 ) -> None:
@@ -1278,15 +1337,15 @@ def _collect_legacy_gene_bed_regions(
                 promoter,
                 chrom_end,
             )
-            promoter_down = _downstream_site_flank(
+            promoter_down_interval = _downstream_site_flank(
                 tss_start,
                 tss_end,
                 strand,
-                promoter,
+                promoter_down,
                 chrom_end,
             )
             _add_interval(intervals["promoter.up"], chrom, promoter_up)
-            _add_interval(intervals["promoter.down"], chrom, promoter_down)
+            _add_interval(intervals["promoter.down"], chrom, promoter_down_interval)
 
             distal_up = _upstream_site_flank(
                 tss_start,
@@ -1297,27 +1356,27 @@ def _collect_legacy_gene_bed_regions(
             )
             _add_interval(intervals["dis5"], chrom, distal_up)
 
-            distal_down = _downstream_site_flank(
+            distal_down_interval = _downstream_site_flank(
                 tes_start,
                 tes_end,
                 strand,
-                distal,
+                distal_down,
                 chrom_end,
             )
             promoter_down_from_tes = _downstream_site_flank(
                 tes_start,
                 tes_end,
                 strand,
-                promoter,
+                promoter_down,
                 chrom_end,
             )
-            _add_interval(intervals["dis3"], chrom, distal_down)
+            _add_interval(intervals["dis3"], chrom, distal_down_interval)
             _add_interval(intervals["_dis3_inner"], chrom, promoter_down_from_tes)
 
             _add_interval(
                 intervals["tes"],
                 chrom,
-                _upstream_site_flank(tes_start, tes_end, strand, tes, chrom_end),
+                _upstream_site_flank(tes_start, tes_end, strand, tes_up, chrom_end),
             )
             _add_interval(
                 intervals["tes"],
@@ -1340,7 +1399,11 @@ def _bedtools_flank_intervals(
     gene_bed: PathLike,
     chrom_lengths: Mapping[str, int],
     promoter: int,
+    promoter_down: int,
     distal: int,
+    distal_down: int,
+    tes: int,
+    tes_up: int,
     split_tss: bool,
     temporary_root: Optional[Path],
 ):
@@ -1387,11 +1450,11 @@ def _bedtools_flank_intervals(
     outputs = {}
     for label, source, left, right in (
         ("tss_promoter_up", tss_path, promoter, 0),
-        ("tss_promoter_down", tss_path, 0, promoter),
+        ("tss_promoter_down", tss_path, 0, promoter_down),
         ("tss_distal_up", tss_path, distal, 0),
-        ("tes_distal_down", tes_path, 0, distal),
-        ("tes_promoter_down", tes_path, 0, promoter),
-        ("tes_up", tes_path, tes, 0),
+        ("tes_distal_down", tes_path, 0, distal_down),
+        ("tes_promoter_down", tes_path, 0, promoter_down),
+        ("tes_up", tes_path, tes_up, 0),
         ("tes_down", tes_path, 0, tes),
     ):
         output = temporary_root / (label + ".bed")
@@ -1590,7 +1653,11 @@ def _collect_tss_flank_intervals(
     promoter: int,
     distal: int,
     split_tss: bool,
+    promoter_down: Optional[int] = None,
+    distal_down: Optional[int] = None,
 ) -> Tuple[Dict[str, Dict[str, List[Tuple[int, int]]]], Tuple[str, ...]]:
+    promoter_down = promoter if promoter_down is None else promoter_down
+    distal_down = distal if distal_down is None else distal_down
     intervals = {
         region_type: {} for region_type in TSS_FLANK_REGION_TYPES
     }  # type: Dict[str, Dict[str, List[Tuple[int, int]]]]
@@ -1616,15 +1683,15 @@ def _collect_tss_flank_intervals(
                 promoter,
                 chrom_end=None,
             )
-            promoter_down = _downstream_site_flank(
+            promoter_down_interval = _downstream_site_flank(
                 tss_start,
                 tss_end,
                 strand,
-                promoter,
+                promoter_down,
                 chrom_end=None,
             )
             _add_interval(intervals["promoter.up"], chrom, promoter_up)
-            _add_interval(intervals["promoter.down"], chrom, promoter_down)
+            _add_interval(intervals["promoter.down"], chrom, promoter_down_interval)
 
             distal_up = _upstream_site_flank(
                 tss_start,
@@ -1635,21 +1702,21 @@ def _collect_tss_flank_intervals(
             )
             _add_interval(intervals["dis5"], chrom, distal_up)
 
-            distal_down = _downstream_site_flank(
+            distal_down_interval = _downstream_site_flank(
                 tes_start,
                 tes_end,
                 strand,
-                distal,
+                distal_down,
                 chrom_end=None,
             )
             promoter_down_from_tes = _downstream_site_flank(
                 tes_start,
                 tes_end,
                 strand,
-                promoter,
+                promoter_down,
                 chrom_end=None,
             )
-            _add_interval(intervals["dis3"], chrom, distal_down)
+            _add_interval(intervals["dis3"], chrom, distal_down_interval)
             _add_interval(dis3_inner, chrom, promoter_down_from_tes)
 
     chrom_order = tuple(chrom_seen.keys())

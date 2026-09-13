@@ -16,6 +16,9 @@ nav:
   - Annotation resources:
       - GeneBEDs: genebeds.md
       - FeatureBEDs: features.md
-      - ChromHMM, Segway, and external resources: datasets.md
+      - ChromHMM: chromhmm.md
+      - Segway: segway.md
+      - Blacklists: blacklists.md
+      - CGI: cgi.md
   - Selection and filtering:
       - Deduplication and selectors: deduplication.md

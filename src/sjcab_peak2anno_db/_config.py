@@ -18,6 +18,9 @@ DEFAULT_FEATURE_SPECS = (
 )
 DEFAULT_STALE_DAYS = 90
 DEFAULT_CLEAN_CACHE_DAYS = 90
+DEFAULT_TXT_DELIMITER = r"\s+"
+DEFAULT_BED_SCORE_COLUMN = 5
+DEFAULT_TXT_SCORE_COLUMN = 2
 
 
 @dataclass(frozen=True)
@@ -30,6 +33,9 @@ class UserConfig:
     stale_days: int = DEFAULT_STALE_DAYS
     clean_cache_days: int = DEFAULT_CLEAN_CACHE_DAYS
     sizes_clean: bool = True
+    txt_delimiter: str = DEFAULT_TXT_DELIMITER
+    bed_score_column: int = DEFAULT_BED_SCORE_COLUMN
+    txt_score_column: int = DEFAULT_TXT_SCORE_COLUMN
     components_configured: bool = False
     feature_specs_configured: bool = False
 
@@ -68,6 +74,15 @@ def load_config() -> UserConfig:
     sizes_clean = _parse_bool(
         values.get("sizesclean") or values.get("sizes_clean"), default=True
     )
+    txt_delimiter = (
+        values.get("txt_delimiter") or DEFAULT_TXT_DELIMITER
+    ).strip()
+    bed_score_column = _parse_column(
+        values.get("bed_score_column"), DEFAULT_BED_SCORE_COLUMN
+    )
+    txt_score_column = _parse_column(
+        values.get("txt_score_column"), DEFAULT_TXT_SCORE_COLUMN
+    )
     return UserConfig(
         db_path=db_path,
         install_components=components,
@@ -75,6 +90,9 @@ def load_config() -> UserConfig:
         stale_days=stale_days,
         clean_cache_days=clean_cache_days,
         sizes_clean=sizes_clean,
+        txt_delimiter=txt_delimiter,
+        bed_score_column=bed_score_column,
+        txt_score_column=txt_score_column,
         components_configured=components_value is not None,
         feature_specs_configured=specs_value is not None,
     )
@@ -94,6 +112,18 @@ def configured_clean_cache_days() -> int:
 
 def configured_sizes_clean() -> bool:
     return load_config().sizes_clean
+
+
+def configured_txt_delimiter() -> str:
+    return load_config().txt_delimiter
+
+
+def configured_bed_score_column() -> int:
+    return load_config().bed_score_column
+
+
+def configured_txt_score_column() -> int:
+    return load_config().txt_score_column
 
 
 def clean_cache_files(
@@ -167,6 +197,9 @@ def _create_default_xdg_config(path: Path) -> None:
 # SJCAB_PEAK2ANNO_DB_VERSION_STALE_DAYS=90
 # SJCAB_PEAK2ANNO_DB_SIZESCLEAN=1
 # SJCAB_PEAK2ANNO_DB_CLEANCACHE=90
+# SJCAB_PEAK2ANNO_DB_TXT_DELIMITER=\\s+
+# SJCAB_PEAK2ANNO_DB_BED_SCORE_COLUMN=5
+# SJCAB_PEAK2ANNO_DB_TXT_SCORE_COLUMN=2
 """,
             encoding="utf-8",
         )
@@ -187,6 +220,9 @@ def _migrate_legacy_default_xdg_config(path: Path) -> None:
         "SJCAB_PEAK2ANNO_DB_VERSION_STALE_DAYS=90",
         "SJCAB_PEAK2ANNO_DB_SIZESCLEAN=1",
         "SJCAB_PEAK2ANNO_DB_CLEANCACHE=90",
+        "SJCAB_PEAK2ANNO_DB_TXT_DELIMITER=\\s+",
+        "SJCAB_PEAK2ANNO_DB_BED_SCORE_COLUMN=5",
+        "SJCAB_PEAK2ANNO_DB_TXT_SCORE_COLUMN=2",
     }
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
@@ -333,3 +369,15 @@ def _parse_bool(value: Optional[str], default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _parse_column(value: Optional[str], default: int) -> int:
+    if not value:
+        return default
+    try:
+        column = int(value)
+    except ValueError as exc:
+        raise ValueError("Selector score columns must be positive integers.") from exc
+    if column < 1:
+        raise ValueError("Selector score columns must be positive integers.")
+    return column

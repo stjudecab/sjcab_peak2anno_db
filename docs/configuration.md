@@ -9,13 +9,15 @@
   `current`, and `latest` where supported.
 - `-d`, `--db-path`: database and cache directory.
 - `-o`, `--output-dir`: staging directory for download commands.
+- `-name NAME`: store selected GeneBEDs or FeatureBEDs under a custom name;
+  records the mapping in `custom.name.tsv`.
 - `-n`, `--no-overwrite`: preserve existing generated files.
 - `--clean-cache [DAYS]`: remove old cache files after generation. The default
   is 90 days; a negative value removes the current cached GTF immediately.
 - `--sizes-clean [0|1]`: create `.sizes.clean` files by default; use `0` to
   disable them.
 - `-j`, `--processes N`: worker processes for GTF-to-GeneBED and FeatureBED
-  generation. The default is `1`.
+  generation. The default is `4`.
 - `-g`, `--gtf-path`: use a local GTF.
 - `-u`, `--url`: override the resolved GTF URL.
 - `--ucsc-source {ens,refseq}`: choose the UCSC gene table.
@@ -45,8 +47,16 @@ SJCAB_PEAK2ANNO_DB_INSTALL_VERSIONS=v31,v31lift37,vM22,vM39
 SJCAB_PEAK2ANNO_DB_VERSION_STALE_DAYS=90
 SJCAB_PEAK2ANNO_DB_SIZESCLEAN=1
 SJCAB_PEAK2ANNO_DB_CLEANCACHE=90
+SJCAB_PEAK2ANNO_DB_TXT_DELIMITER=\s+
+SJCAB_PEAK2ANNO_DB_BED_SCORE_COLUMN=5
+SJCAB_PEAK2ANNO_DB_TXT_SCORE_COLUMN=2
 ```
 
 `VERSION_STALE_DAYS` controls refresh of Ensembl `VERSION` and species
 catalogues. `SIZESCLEAN=0` disables `.sizes.clean`; `CLEANCACHE` controls cache
 cleanup age. Explicit command-line options take precedence.
+
+`TXT_DELIMITER` is used only for text-mode `peak` and `perover` selector rows;
+it is not a command-line option. Selector format is auto-detected: BED rows
+use the configured `BED_SCORE_COLUMN` (default `5`), while text rows use
+`TXT_SCORE_COLUMN` (default `2`).
