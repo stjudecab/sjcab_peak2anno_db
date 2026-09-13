@@ -30,8 +30,9 @@ Use `--promoter-down` to set a separate downstream promoter window; it defaults
 to `--promoter-bp`. Selector files are auto-detected as BED or text. BED rows
 use score column 5 and text rows use score column 2 by default. Configure the
 columns with `SJCAB_PEAK2ANNO_DB_BED_SCORE_COLUMN` and
-`SJCAB_PEAK2ANNO_DB_TXT_SCORE_COLUMN`; configure text field splitting with
-`SJCAB_PEAK2ANNO_DB_TXT_DELIMITER` (default `\s+`).
+`SJCAB_PEAK2ANNO_DB_TXT_SCORE_COLUMN`. Configure accepted delimiters inside
+text-mode peak regions with `SJCAB_PEAK2ANNO_DB_PEAK_TXT_DELIMITER`; the
+default is `:`, `-`, `*`, `=`, `/`, `^`, `;`, `_`, `%`, `$`, and `,`.
 
 By default transcripts are grouped by gene symbol. Use `--gene-key ensid` to
 group by Ensembl/GENCODE gene ID.

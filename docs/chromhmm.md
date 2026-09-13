@@ -16,3 +16,9 @@ Other UCSC builds use `--yes-liftover`; chain files are cached under
 
 Output is stored under `{db-path}/chromhmm/{genome}` with a `metadata.tsv`
 index.
+
+## Resource URLs
+
+- [Roadmap metadata](https://egg2.wustl.edu/roadmap/web_portal/data.js)
+- [Roadmap 15-state BED files](https://egg2.wustl.edu/roadmap/data/byFileType/)
+- [UCSC hg38 liftOver chains](https://hgdownload.soe.ucsc.edu/goldenPath/hg38/liftOver/)

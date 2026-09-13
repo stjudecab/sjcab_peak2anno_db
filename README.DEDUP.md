@@ -28,8 +28,9 @@
 - Selector format is auto-detected. BED rows use column 5 as the score and text
   rows use column 2; configure these with `SJCAB_PEAK2ANNO_DB_BED_SCORE_COLUMN`
   and `SJCAB_PEAK2ANNO_DB_TXT_SCORE_COLUMN`.
-- Text rows are split using `SJCAB_PEAK2ANNO_DB_TXT_DELIMITER`, whose default
-  is whitespace (`\s+`). This setting is available in the RC file or
+- `SJCAB_PEAK2ANNO_DB_PEAK_TXT_DELIMITER` controls delimiters inside text-mode
+  peak regions such as `chr_100-200`. Its default is `:`, `-`, `*`, `=`, `/`,
+  `^`, `;`, `_`, `%`, `$`, and `,`. This setting is available in the RC file or
   environment and is not a command-line option.
 - Isoforms are grouped by gene symbol by default; use `--gene-key ensid` to
   group by Ensembl/GENCODE gene ID.

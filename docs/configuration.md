@@ -47,7 +47,7 @@ SJCAB_PEAK2ANNO_DB_INSTALL_VERSIONS=v31,v31lift37,vM22,vM39
 SJCAB_PEAK2ANNO_DB_VERSION_STALE_DAYS=90
 SJCAB_PEAK2ANNO_DB_SIZESCLEAN=1
 SJCAB_PEAK2ANNO_DB_CLEANCACHE=90
-SJCAB_PEAK2ANNO_DB_TXT_DELIMITER=\s+
+SJCAB_PEAK2ANNO_DB_PEAK_TXT_DELIMITER=:-*=/^;_%$,
 SJCAB_PEAK2ANNO_DB_BED_SCORE_COLUMN=5
 SJCAB_PEAK2ANNO_DB_TXT_SCORE_COLUMN=2
 ```
@@ -56,7 +56,8 @@ SJCAB_PEAK2ANNO_DB_TXT_SCORE_COLUMN=2
 catalogues. `SIZESCLEAN=0` disables `.sizes.clean`; `CLEANCACHE` controls cache
 cleanup age. Explicit command-line options take precedence.
 
-`TXT_DELIMITER` is used only for text-mode `peak` and `perover` selector rows;
-it is not a command-line option. Selector format is auto-detected: BED rows
-use the configured `BED_SCORE_COLUMN` (default `5`), while text rows use
-`TXT_SCORE_COLUMN` (default `2`).
+`PEAK_TXT_DELIMITER` controls delimiters inside text-mode `peak` regions, such
+as `chr_100-200`; it is not a command-line option. Its default delimiters are
+`:`, `-`, `*`, `=`, `/`, `^`, `;`, `_`, `%`, `$`, and `,`. Selector format is
+auto-detected: BED rows use the configured `BED_SCORE_COLUMN` (default `5`),
+while text rows use `TXT_SCORE_COLUMN` (default `2`).

@@ -11,7 +11,7 @@ from typing import Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 from ._derive import _length, _parse_bed_fields, _site_interval, write_tes, write_tss
 from ._config import (
     configured_bed_score_column,
-    configured_txt_delimiter,
+    configured_peak_txt_delimiter,
     configured_txt_score_column,
 )
 from ._registry import default_version as registry_default_version
@@ -20,9 +20,6 @@ from ._registry import path as registry_path
 PathLike = Union[str, os.PathLike]
 
 DEDUP_METHODS = ("longcol5", "long", "peak", "isoID", "isoexp", "perover")
-REGION_RE = re.compile(r"^(.+?)[\:\*\-=/\^;_%\$,](\d+)[\:\*\-=/\^;_%\$,](\d+)$")
-
-
 @dataclass(frozen=True)
 class _IsoformRecord:
     fields: Tuple[str, ...]
@@ -507,7 +504,7 @@ def _looks_like_interval(fields: Sequence[str]) -> bool:
             return True
         except ValueError:
             pass
-    return bool(fields) and REGION_RE.match(fields[0]) is not None
+    return bool(fields) and _region_match(fields[0]) is not None
 
 
 def _is_bed_row(fields: Sequence[str]) -> bool:
@@ -533,7 +530,7 @@ def _selector_coordinates(
             pass
     if not fields:
         raise ValueError("empty selector row")
-    match = REGION_RE.match(fields[0])
+    match = _region_match(fields[0])
     if match is None:
         raise ValueError("{}:{} is not a region".format(selector, line_number))
     chrom, start, end = match.groups()
@@ -555,20 +552,15 @@ def _split_selector_fields(line: str) -> List[str]:
     stripped = line.strip()
     if "\t" in stripped:
         return stripped.split("\t")
-    whitespace_fields = stripped.split()
-    if _looks_like_interval(whitespace_fields):
-        return whitespace_fields
-    delimiter = configured_txt_delimiter()
-    if delimiter.lower() in {"space", "whitespace", r"\s+"}:
-        return stripped.split()
-    if delimiter.lower() in {"tab", r"\t"}:
-        return stripped.split("\t")
-    try:
-        return [field for field in re.split(delimiter, stripped) if field]
-    except re.error as exc:
-        raise ValueError(
-            "SJCAB_PEAK2ANNO_DB_TXT_DELIMITER is not a valid regular expression."
-        ) from exc
+    return stripped.split()
+
+
+def _region_match(value: str):
+    delimiters = re.escape(configured_peak_txt_delimiter())
+    pattern = re.compile(
+        r"^(.+?)[{}](\d+)[{}](\d+)$".format(delimiters, delimiters)
+    )
+    return pattern.match(value)
 
 
 def _column_score(

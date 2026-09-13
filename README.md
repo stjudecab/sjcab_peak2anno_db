@@ -102,7 +102,7 @@ SJCAB_PEAK2ANNO_DB_INSTALL_VERSIONS=v31,v31lift37,vM22,vM39
 SJCAB_PEAK2ANNO_DB_VERSION_STALE_DAYS=90
 SJCAB_PEAK2ANNO_DB_SIZESCLEAN=1
 SJCAB_PEAK2ANNO_DB_CLEANCACHE=90
-SJCAB_PEAK2ANNO_DB_TXT_DELIMITER=\s+
+SJCAB_PEAK2ANNO_DB_PEAK_TXT_DELIMITER=:-*=/^;_%$,
 SJCAB_PEAK2ANNO_DB_BED_SCORE_COLUMN=5
 SJCAB_PEAK2ANNO_DB_TXT_SCORE_COLUMN=2
 ```
@@ -125,11 +125,12 @@ after BED generation. A negative value removes the newly used cached GTF
 immediately. The command-line form is `--clean-cache [DAYS]`; using
 `--clean-cache` without a value means immediate cleanup.
 
-`TXT_DELIMITER` controls splitting of text selector rows for `peak` and
-`perover`; its commented default is whitespace (`\s+`). Selector files are
-auto-detected as BED or text: BED rows use the configured fifth-column score,
-while text rows use the configured second-column score. Override these with
-`BED_SCORE_COLUMN` and `TXT_SCORE_COLUMN` in the environment or RC file.
+`PEAK_TXT_DELIMITER` controls the delimiters accepted inside text-mode peak
+regions such as `chr_100-200`; its commented default is `:`, `-`, `*`, `=`,
+`/`, `^`, `;`, `_`, `%`, `$`, and `,`. Selector files are auto-detected as BED
+or text: BED rows use the configured fifth-column score, while text rows use
+the configured second-column score. Override these with `BED_SCORE_COLUMN` and
+`TXT_SCORE_COLUMN` in the environment or RC file.
 
 ## GeneBEDs
 

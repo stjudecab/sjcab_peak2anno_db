@@ -18,7 +18,7 @@ DEFAULT_FEATURE_SPECS = (
 )
 DEFAULT_STALE_DAYS = 90
 DEFAULT_CLEAN_CACHE_DAYS = 90
-DEFAULT_TXT_DELIMITER = r"\s+"
+DEFAULT_PEAK_TXT_DELIMITER = ":-*=/^;_%$,"
 DEFAULT_BED_SCORE_COLUMN = 5
 DEFAULT_TXT_SCORE_COLUMN = 2
 
@@ -33,7 +33,7 @@ class UserConfig:
     stale_days: int = DEFAULT_STALE_DAYS
     clean_cache_days: int = DEFAULT_CLEAN_CACHE_DAYS
     sizes_clean: bool = True
-    txt_delimiter: str = DEFAULT_TXT_DELIMITER
+    peak_txt_delimiter: str = DEFAULT_PEAK_TXT_DELIMITER
     bed_score_column: int = DEFAULT_BED_SCORE_COLUMN
     txt_score_column: int = DEFAULT_TXT_SCORE_COLUMN
     components_configured: bool = False
@@ -74,8 +74,8 @@ def load_config() -> UserConfig:
     sizes_clean = _parse_bool(
         values.get("sizesclean") or values.get("sizes_clean"), default=True
     )
-    txt_delimiter = (
-        values.get("txt_delimiter") or DEFAULT_TXT_DELIMITER
+    peak_txt_delimiter = (
+        values.get("peak_txt_delimiter") or DEFAULT_PEAK_TXT_DELIMITER
     ).strip()
     bed_score_column = _parse_column(
         values.get("bed_score_column"), DEFAULT_BED_SCORE_COLUMN
@@ -90,7 +90,7 @@ def load_config() -> UserConfig:
         stale_days=stale_days,
         clean_cache_days=clean_cache_days,
         sizes_clean=sizes_clean,
-        txt_delimiter=txt_delimiter,
+        peak_txt_delimiter=peak_txt_delimiter,
         bed_score_column=bed_score_column,
         txt_score_column=txt_score_column,
         components_configured=components_value is not None,
@@ -114,8 +114,8 @@ def configured_sizes_clean() -> bool:
     return load_config().sizes_clean
 
 
-def configured_txt_delimiter() -> str:
-    return load_config().txt_delimiter
+def configured_peak_txt_delimiter() -> str:
+    return load_config().peak_txt_delimiter
 
 
 def configured_bed_score_column() -> int:
@@ -197,7 +197,7 @@ def _create_default_xdg_config(path: Path) -> None:
 # SJCAB_PEAK2ANNO_DB_VERSION_STALE_DAYS=90
 # SJCAB_PEAK2ANNO_DB_SIZESCLEAN=1
 # SJCAB_PEAK2ANNO_DB_CLEANCACHE=90
-# SJCAB_PEAK2ANNO_DB_TXT_DELIMITER=\\s+
+# SJCAB_PEAK2ANNO_DB_PEAK_TXT_DELIMITER=:-*=/^;_%$,
 # SJCAB_PEAK2ANNO_DB_BED_SCORE_COLUMN=5
 # SJCAB_PEAK2ANNO_DB_TXT_SCORE_COLUMN=2
 """,
@@ -220,7 +220,7 @@ def _migrate_legacy_default_xdg_config(path: Path) -> None:
         "SJCAB_PEAK2ANNO_DB_VERSION_STALE_DAYS=90",
         "SJCAB_PEAK2ANNO_DB_SIZESCLEAN=1",
         "SJCAB_PEAK2ANNO_DB_CLEANCACHE=90",
-        "SJCAB_PEAK2ANNO_DB_TXT_DELIMITER=\\s+",
+        "SJCAB_PEAK2ANNO_DB_PEAK_TXT_DELIMITER=:-*=/^;_%$,",
         "SJCAB_PEAK2ANNO_DB_BED_SCORE_COLUMN=5",
         "SJCAB_PEAK2ANNO_DB_TXT_SCORE_COLUMN=2",
     }
