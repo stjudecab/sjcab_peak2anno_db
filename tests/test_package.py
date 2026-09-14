@@ -1680,7 +1680,7 @@ def test_install_segway_yes_liftover_sets_install_root(monkeypatch, tmp_path):
     assert called["install_root"] == tmp_path / "segway"
 
 
-def test_segway_liftover_script_uses_crossmap_and_ucsc_chain(tmp_path):
+def test_segway_liftover_script_prefers_ucsc_liftover_and_uses_ucsc_chain(tmp_path):
     script = db.segway_liftover_script(
         tmp_path / "segway" / "hg19",
         tmp_path / "segway" / "hg38",
@@ -1702,6 +1702,8 @@ def test_segway_liftover_script_uses_crossmap_and_ucsc_chain(tmp_path):
     assert "remove the env so this script can recreate it" in script
     assert "create_and_activate_env" in script
     assert 'create -y -n "${ENV_NAME}"' in script
+    assert "bioconda::ucsc-liftover" in script
+    assert "LIFTOVER_MODE=ucsc" in script
     assert "crossmap" in script
     assert "cp -p" in script
     assert "INSTALL_ROOT=" in script

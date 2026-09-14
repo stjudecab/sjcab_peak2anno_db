@@ -26,10 +26,11 @@ sjcab-peak2anno-db install-feature equcab2 # install GeneBEDs/FeatureBEDs for ho
 sjcab-peak2anno-db install-feature zea_mays # install GeneBEDs/FeatureBEDs for corn ensemble current release(empty/def/default/current/latest are the same)
 ```
 
-Supported bundled GeneBED species are `hg19`, `hg38`, `mm10`, `mm9`,
-`mm39`(Gencode) and `sacCer3`. All other GeneBED/FeatureBED resources for species/version are automatically generated from GENCODE/UCSC/Ensembl GTFs.
-CGI: `hg38`, `hg19`, `mm10`, `mm9`, and `mm39`
-blacklists: [readme.md](https://github.com/stjudecab/sjcab_peak2anno_db/tree/main/src/sjcab_peak2anno_db/data/blacklists)
+- Supported bundled GeneBED species are `hg19`, `hg38`, `mm10`, `mm9`,
+`mm39`(Gencode) and `sacCer3`. 
+- All other GeneBED/FeatureBED resources for species/version are automatically generated from GENCODE/UCSC/Ensembl GTFs.
+- CGI: `hg38`, `hg19`, `mm10`, `mm9`, and `mm39`
+- blacklists: [readme.md](https://github.com/stjudecab/sjcab_peak2anno_db/tree/main/src/sjcab_peak2anno_db/data/blacklists)
 
 All download first checks the db-path/cache folder(> output directory > working directory) before downloading. Every downloaded file appends the source URL to `{db-path}/download_urls.log`
 
@@ -71,8 +72,9 @@ Common option styles:
   cleanup behavior.
 - `--sizes-clean [0|1]`: create `.sizes.clean` files by default. Use
   `--sizes-clean 0` to disable them. 
-- `-j`, `--processes N`: use `N` worker processes for GTF-to-GeneBED
-  conversion and FeatureBED generation. Default is `4`.
+- `-j`, `--processes N`: use `N` workers, one GTF per worker. GTF downloads are
+  sequential with a short randomized pause; conversion within each worker is
+  single-process. Default is `4`.
 - `-g`, `--gtf-path FILE`: use an existing local GTF instead of downloading
   one.
 - `-u`, `--url URL`: override the resolved GTF URL.
@@ -449,7 +451,7 @@ sjcab-peak2anno-db download-segway -o segway_downloads --include-caas
 ```
 
 Segway source files are hg19 only. If another genome is requested, the CLI asks
-whether to download hg19 and write a CrossMap liftover helper script. In
+whether to download hg19 and write a UCSC liftOver helper script. In
 non-interactive runs, use `--yes-liftover`.
 
 ```bash
@@ -459,7 +461,8 @@ sjcab-peak2anno-db download-segway -o segway_downloads -s hg38 --yes-liftover -i
 The generated script first tries to activate an existing `segway-liftover`
 environment with micromamba, conda, or mamba. If activation succeeds, the script
 does not install or modify packages inside it. If activation fails for all
-available tools, the script creates the environment with CrossMap. It downloads
+available tools, the script creates an environment with `bioconda::ucsc-liftover`
+first and falls back to CrossMap if that package cannot be installed. It downloads
 the UCSC `hg19To<Genome>.over.chain.gz` file from
 `https://hgdownload.soe.ucsc.edu/goldenPath/hg19/liftOver/` and lifts over
 downloaded `.bed.gz` files. For `install-segway`, lifted files are staged and

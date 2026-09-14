@@ -5,6 +5,7 @@ from __future__ import annotations
 import gzip
 import json
 import os
+import random
 import re
 import shutil
 import time
@@ -1192,8 +1193,8 @@ def convert_gencode_gtf_to_bed(
     ``gene_id.version, transcript_id.version, gene_type``.
 
     ``gene_types`` can be used to keep only selected GENCODE gene types.
-    ``processes`` controls parallel transcript formatting; ``1`` keeps the
-    single-process behavior.
+    ``processes`` is retained for API compatibility; conversion of one GTF is
+    always single-process. Parallelism is applied between independent GTFs.
     """
 
     output = Path(output_bed).expanduser()
@@ -1209,20 +1210,10 @@ def convert_gencode_gtf_to_bed(
     tmp_path = output.with_name(output.name + ".tmp")
     try:
         records_in_order = [records[transcript_id] for transcript_id in order]
-        if processes > 1:
-            with ProcessPoolExecutor(max_workers=processes) as executor:
-                lines = executor.map(
-                    _format_transcript_bed,
-                    records_in_order,
-                    [selected_types] * len(records_in_order),
-                    chunksize=max(1, len(records_in_order) // (processes * 4) or 1),
-                )
-                formatted_lines = lines
-        else:
-            formatted_lines = (
-                _format_transcript_bed(record, selected_types)
-                for record in records_in_order
-            )
+        formatted_lines = (
+            _format_transcript_bed(record, selected_types)
+            for record in records_in_order
+        )
         with tmp_path.open("w", encoding="utf-8") as handle:
             for line in formatted_lines:
                 if line:
@@ -1348,19 +1339,60 @@ def regenerate_gencode_beds(
     and avoids downloading large files during package maintenance.
     """
 
-    generated = []
-    for species, version, gtf_path in specs:
-        generated.append(
-            download_and_convert_gencode_gtf(
+    jobs = [
+        (species, version, gtf_path, output_dir, overwrite)
+        for species, version, gtf_path in specs
+    ]
+    if processes > 1 and len(jobs) > 1:
+        with ProcessPoolExecutor(max_workers=processes) as executor:
+            return tuple(executor.map(_regenerate_gencode_bed_worker, jobs))
+    return tuple(_regenerate_gencode_bed_worker(job) for job in jobs)
+
+
+def _regenerate_gencode_bed_worker(job):
+    species, version, gtf_path, output_dir, overwrite = job
+    return download_and_convert_gencode_gtf(
+        species,
+        version,
+        output_dir,
+        gtf_path=gtf_path,
+        overwrite=overwrite,
+        processes=1,
+    )
+
+
+def download_gencode_gtf_batch(
+    specs: Iterable[Tuple[str, str]],
+    output_dir: PathLike = ".",
+    gtf_url: Optional[str] = None,
+    overwrite: bool = True,
+    log_data_dir: Optional[PathLike] = None,
+    progress: Optional[ProgressCallback] = None,
+    source: str = "auto",
+    cache_dir: Optional[PathLike] = None,
+    ucsc_annotation: str = "ens",
+) -> Tuple[Path, ...]:
+    """Download a batch of GTFs serially with a short randomized pause."""
+
+    downloaded = []
+    for index, (species, version) in enumerate(specs):
+        if index:
+            time.sleep(random.random() * 2)
+        downloaded.append(
+            download_gencode_gtf(
                 species,
                 version,
                 output_dir,
-                gtf_path=gtf_path,
+                gtf_url=gtf_url,
                 overwrite=overwrite,
-                processes=processes,
+                log_data_dir=log_data_dir,
+                progress=progress,
+                source=source,
+                cache_dir=cache_dir,
+                ucsc_annotation=ucsc_annotation,
             )
         )
-    return tuple(generated)
+    return tuple(downloaded)
 
 
 def _read_transcripts(

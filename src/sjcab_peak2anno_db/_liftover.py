@@ -1,4 +1,4 @@
-"""Generate CrossMap helpers for BED resources."""
+"""Generate UCSC liftOver/CrossMap helpers for BED resources."""
 
 from __future__ import annotations
 
@@ -74,19 +74,34 @@ activate_existing_env() {{
 
 create_and_activate_env() {{
   if command -v micromamba >/dev/null 2>&1; then
+    if micromamba create -y -n "${{ENV_NAME}}" bioconda::ucsc-liftover; then
+      eval "$(micromamba shell hook -s bash)"
+      micromamba activate "${{ENV_NAME}}"
+      return 0
+    fi
     micromamba create -y -n "${{ENV_NAME}}" -c conda-forge -c bioconda crossmap
     eval "$(micromamba shell hook -s bash)"
     micromamba activate "${{ENV_NAME}}"
   elif command -v mamba >/dev/null 2>&1; then
+    if mamba create -y -n "${{ENV_NAME}}" bioconda::ucsc-liftover; then
+      eval "$(mamba shell hook -s bash)"
+      mamba activate "${{ENV_NAME}}"
+      return 0
+    fi
     mamba create -y -n "${{ENV_NAME}}" -c conda-forge -c bioconda crossmap
     eval "$(mamba shell hook -s bash)"
     mamba activate "${{ENV_NAME}}"
   elif command -v conda >/dev/null 2>&1; then
+    if conda create -y -n "${{ENV_NAME}}" bioconda::ucsc-liftover; then
+      eval "$(conda shell.bash hook)"
+      conda activate "${{ENV_NAME}}"
+      return 0
+    fi
     conda create -y -n "${{ENV_NAME}}" -c conda-forge -c bioconda crossmap
     eval "$(conda shell.bash hook)"
     conda activate "${{ENV_NAME}}"
   else
-    echo "micromamba, mamba, or conda is required to install CrossMap" >&2
+    echo "micromamba, mamba, or conda is required to install liftOver or CrossMap" >&2
     exit 1
   fi
 }}
@@ -95,14 +110,27 @@ if ! activate_existing_env; then
   create_and_activate_env
 fi
 
-if command -v CrossMap >/dev/null 2>&1; then
+if command -v liftOver >/dev/null 2>&1; then
+  LIFTOVER=(liftOver)
+  LIFTOVER_MODE=ucsc
+elif command -v CrossMap >/dev/null 2>&1; then
   CROSSMAP=(CrossMap)
+  LIFTOVER_MODE=crossmap
 elif command -v CrossMap.py >/dev/null 2>&1; then
   CROSSMAP=(CrossMap.py)
+  LIFTOVER_MODE=crossmap
 else
-  echo "CrossMap is not available in conda environment ${{ENV_NAME}}." >&2
+  echo "liftOver and CrossMap are not available in conda environment ${{ENV_NAME}}." >&2
   exit 1
 fi
+
+run_liftover() {{
+  if [ "${{LIFTOVER_MODE}}" = "ucsc" ]; then
+    "${{LIFTOVER[@]}}" "$@"
+  else
+    "${{CROSSMAP[@]}}" bed "$@"
+  fi
+}}
 
 while IFS= read -r -d '' bed; do
   rel="${{bed#${{INPUT_DIR}}/}}"
@@ -121,10 +149,10 @@ while IFS= read -r -d '' bed; do
   if [[ "${{bed}}" == *.gz ]]; then
     unpacked="${{TMP_DIR}}/$(basename "${{plain}}")"
     gzip -dc "${{bed}}" > "${{unpacked}}"
-    "${{CROSSMAP[@]}}" bed "${{CHAIN}}" "${{unpacked}}" "${{plain}}"
+    run_liftover "${{CHAIN}}" "${{unpacked}}" "${{plain}}"
     gzip -f "${{plain}}"
   else
-    "${{CROSSMAP[@]}}" bed "${{CHAIN}}" "${{bed}}" "${{plain}}"
+    run_liftover "${{CHAIN}}" "${{bed}}" "${{plain}}"
   fi
   [ -e "${{plain}}.unmap" ] || : > "${{plain}}.unmap"
 done < <(find "${{INPUT_DIR}}" -path "${{INPUT_DIR}}/.liftover" -prune -o \\( -type f -o -type l \\) {source_filter} \\( -name '*.bed' -o -name '*.bed.gz' \\) -print0)

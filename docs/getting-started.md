@@ -31,8 +31,9 @@ sjcab-peak2anno-db download-feature mm10 vM22 -o annotations
 sjcab-peak2anno-db install-feature cat def
 ```
 
-Use `-j/--processes` to parallelize GTF-to-GeneBED conversion and FeatureBED
-generation:
+Use `-j/--processes` to process independent GTFs in parallel. GTF downloads are
+sequential with a short randomized pause, and conversion within each worker is
+single-process:
 
 ```bash
 sjcab-peak2anno-db download-feature hg38 v31 -j 8

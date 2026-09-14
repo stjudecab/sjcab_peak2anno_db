@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import json
 import shutil
+import sys
+import time
+from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Optional, Tuple, Union
@@ -11,7 +14,7 @@ from typing import Iterable, Optional, Tuple, Union
 from ._download import ProgressCallback, report_progress
 from ._config import load_config, parse_species_version_values
 from ._derive import write_deduplong
-from ._gencode import data_species_name
+from ._gencode import data_species_name, download_gencode_gtf_batch
 from ._external import (
     BLACKLIST_VERSION,
     install_blacklists,
@@ -93,13 +96,15 @@ def install_data(
             processes=processes,
         )
         if config.feature_specs_configured:
-            for feature_species, feature_version in config.feature_specs:
-                install_gencode_features(
-                    target_root,
-                    species=feature_species,
-                    version=feature_version,
-                    **feature_kwargs
-                )
+            configured_specs = tuple(
+                "{}:{}".format(feature_species, feature_version)
+                for feature_species, feature_version in config.feature_specs
+            )
+            install_gencode_features(
+                target_root,
+                species=configured_specs,
+                **feature_kwargs
+            )
         else:
             install_gencode_features(target_root, **feature_kwargs)
 
@@ -215,45 +220,69 @@ def install_gencode_features(
     effective_cache_dir = target_root if cache_dir is None else cache_dir
     report_progress(progress, "install-feature: GENCODE BEDs done")
 
-    for feature_species, feature_version in _feature_install_specs(species, version):
+    specs = _feature_install_specs(species, version)
+    if gtf_path is None:
+        gtf_paths = download_gencode_gtf_batch(
+            specs,
+            output_dir=output_dir or target_root,
+            gtf_url=gtf_url,
+            log_data_dir=target_root,
+            progress=progress,
+            cache_dir=effective_cache_dir,
+            ucsc_annotation=ucsc_annotation,
+        )
+    else:
+        gtf_paths = tuple(Path(gtf_path).expanduser() for _ in specs)
+
+    jobs = []
+    for (feature_species, feature_version), selected_gtf_path in zip(specs, gtf_paths):
         report_progress(
             progress,
             "install-feature: installing feature set {} {}".format(
                 feature_species, feature_version
             ),
         )
-        install_gencode_feature_set(
-            feature_species,
-            feature_version,
-            data_dir=target_root,
-            overwrite=overwrite,
-            prefix=prefix,
-            source_dir=output_dir,
-            gtf_path=gtf_path,
-            gtf_url=gtf_url,
-            gene_bed=gene_bed,
-            promoter_bp=promoter_bp,
-            distal_bp=distal_bp,
-            tes_bp=tes_bp,
-            split_tss=split_tss,
-            progress=progress,
-            cache_dir=effective_cache_dir,
-            ucsc_annotation=ucsc_annotation,
-            clean_cache=clean_cache,
-            sizes_clean=sizes_clean,
-            custom_name=custom_name,
-            collector_backend=collector_backend,
-            processes=processes,
-            promoter_down_bp=promoter_down_bp,
-            distal_down_bp=distal_down_bp,
-            tes_up_bp=tes_up_bp,
-            skip_existing=_can_skip_existing_feature_install(
-                source_dir=output_dir,
-                gtf_path=gtf_path,
-                gtf_url=gtf_url,
-                gene_bed=gene_bed,
-            ),
+        jobs.append(
+            {
+                "species": feature_species,
+                "version": feature_version,
+                "data_dir": target_root,
+                "overwrite": overwrite,
+                "prefix": prefix,
+                "source_dir": output_dir,
+                "gtf_path": selected_gtf_path,
+                "gtf_url": gtf_url,
+                "gene_bed": gene_bed,
+                "promoter_bp": promoter_bp,
+                "distal_bp": distal_bp,
+                "tes_bp": tes_bp,
+                "split_tss": split_tss,
+                "cache_dir": effective_cache_dir,
+                "ucsc_annotation": ucsc_annotation,
+                "clean_cache": clean_cache,
+                "sizes_clean": sizes_clean,
+                "custom_name": custom_name,
+                "collector_backend": collector_backend,
+                "promoter_down_bp": promoter_down_bp,
+                "distal_down_bp": distal_down_bp,
+                "tes_up_bp": tes_up_bp,
+                "skip_existing": _can_skip_existing_feature_install(
+                    source_dir=output_dir,
+                    gtf_path=gtf_path,
+                    gtf_url=gtf_url,
+                    gene_bed=gene_bed,
+                ),
+            }
         )
+
+    if processes > 1 and len(jobs) > 1:
+        with ProcessPoolExecutor(max_workers=processes) as executor:
+            tuple(executor.map(_install_gencode_feature_set_worker, jobs))
+    else:
+        for job in jobs:
+            _install_gencode_feature_set_worker(job)
+
+    for feature_species, feature_version in specs:
         report_progress(
             progress,
             "install-feature: feature set {} {} done".format(
@@ -263,6 +292,21 @@ def install_gencode_features(
 
     report_progress(progress, "install-feature: done")
     return target_root
+
+
+def _install_gencode_feature_set_worker(job):
+    arguments = dict(job)
+    arguments["progress"] = _install_worker_progress
+    arguments["processes"] = 1
+    return install_gencode_feature_set(**arguments)
+
+
+def _install_worker_progress(message: str) -> None:
+    print(
+        "[{}] {}".format(time.strftime("%H:%M:%S"), message),
+        file=sys.stderr,
+        flush=True,
+    )
 
 
 def install_gencode_feature_set(

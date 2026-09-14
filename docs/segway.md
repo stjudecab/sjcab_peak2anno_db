@@ -1,7 +1,8 @@
 # Segway
 
-Segway downloads the hg19 encyclopedia and can create a CrossMap liftOver
-script for another UCSC assembly.
+Segway downloads the hg19 encyclopedia and can create a liftOver script for
+another UCSC assembly. Generated scripts try the UCSC `liftOver` binary from
+the `bioconda::ucsc-liftover` package first and fall back to CrossMap.
 
 ```bash
 sjcab-peak2anno-db install-segway

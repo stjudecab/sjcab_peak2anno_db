@@ -27,7 +27,8 @@ Main options:
 - `--prefix`/`-P`: output prefix.
 - `--gene-bed`/`-b`: existing GeneBED.
 - `--gtf-path`/`-g`: existing local GTF.
-- `--processes`/`-j`: parallel conversion and feature-file writing.
+- `--processes`/`-j`: parallel processing of independent GTFs. Downloads are
+  sequential and conversion within each worker is single-process.
 
 ## Output layout
 

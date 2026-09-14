@@ -178,8 +178,9 @@ def download_gencode_feature(
 ) -> Mapping[str, Path]:
     """Download/convert GENCODE GTF and write old-style FeatureBED classes.
 
-    ``processes`` controls both gene-BED conversion and parallel feature-file
-    writing; ``1`` keeps the single-process behavior.
+    ``processes`` is retained for API compatibility; conversion and FeatureBED
+    writing for one GTF are always single-process. Parallelism is applied
+    between independent GTFs.
     """
 
     target_dir = Path(output_dir).expanduser()
@@ -216,7 +217,7 @@ def download_gencode_feature(
             convert_gencode_gtf_to_bed(
                 gtf_for_regions,
                 gene_bed,
-                processes=processes,
+                processes=1,
             )
     else:
         gene_bed = Path(gene_bed).expanduser()
@@ -255,7 +256,7 @@ def download_gencode_feature(
         collector_backend=collector_backend,
         processes=processes,
     )
-    report_progress(progress, "download-feature: legacy BED files done")
+    #report_progress(progress, "download-feature: legacy BED files done")
     outputs["list"] = write_gencode_feature_list(outputs, target_dir, label)
     cached_path = Path(gtf_for_regions)
     cache_root = user_data_dir(cache_dir) / "cache"
@@ -273,6 +274,28 @@ def download_gencode_feature(
 
 
 download_feature = download_gencode_feature
+
+
+def download_gencode_feature_batch(
+    jobs: Iterable[Mapping[str, object]],
+    processes: int = 4,
+) -> Tuple[Mapping[str, Path], ...]:
+    """Run one single-process FeatureBED conversion per downloaded GTF."""
+
+    queued = tuple(dict(job) for job in jobs)
+    if processes > 1 and len(queued) > 1:
+        with ProcessPoolExecutor(max_workers=processes) as executor:
+            return tuple(executor.map(_download_gencode_feature_worker, queued))
+    return tuple(_download_gencode_feature_worker(job) for job in queued)
+
+
+def _download_gencode_feature_worker(
+    job: Mapping[str, object],
+) -> Mapping[str, Path]:
+    arguments = dict(job)
+    arguments["processes"] = 1
+    arguments["progress"] = None
+    return download_gencode_feature(**arguments)
 
 
 def download_gencode_tss_flank_region_unions(
@@ -373,9 +396,9 @@ def write_legacy_gencode_feature_unions(
     removed, and intergenic is the complement of all generated feature classes.
 
     ``backend="auto"`` prefers ``pybedtools``, then the ``bedtools`` command,
-    and finally the built-in writer. The accelerated backends are optional and
-    only affect serialization of the already-computed intervals. ``processes``
-    controls parallel serialization of the independent feature files.
+    and finally the built-in writer. The accelerated backends are optional.
+    ``processes`` is retained for API compatibility; FeatureBED serialization
+    for one GTF is always single-process.
     """
 
     if processes < 1:
@@ -423,15 +446,9 @@ def write_legacy_gencode_feature_unions(
         )
         for region_type in GENCODE_FEATURE_LIST_ORDER + ("promoter",)
     ]
-    if processes > 1:
-        with ProcessPoolExecutor(max_workers=processes) as executor:
-            written = executor.map(_write_feature_intervals_worker, jobs)
-            for region_type, output_path in written:
-                outputs[region_type] = output_path
-    else:
-        for job in jobs:
-            region_type, output_path = _write_feature_intervals_worker(job)
-            outputs[region_type] = output_path
+    for job in jobs:
+        region_type, output_path = _write_feature_intervals_worker(job)
+        outputs[region_type] = output_path
     return outputs
 
 

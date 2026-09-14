@@ -15,6 +15,7 @@ from ._dedup import dedup_gencode_bed, filter_gencode_bed
 from ._external import CGI_SPECIES, download_cgi, install_blacklists, install_cgi
 from ._gencode import (
     download_and_convert_gencode_gtf,
+    download_gencode_gtf_batch,
     ensembl_gtf_url_candidates,
     gtf_url_is_available,
     resolve_gencode_gtf_url,
@@ -27,7 +28,10 @@ from ._install import (
     install_gencode_features,
     update_data,
 )
-from ._regions import download_gencode_feature, gencode_feature_prefix
+from ._regions import (
+    download_gencode_feature_batch,
+    gencode_feature_prefix,
+)
 from ._registry import (
     ANNOTATION_TYPES,
     ISOFORM_SETS,
@@ -133,7 +137,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     install_parser.add_argument(
         "-j", "--processes", type=int, default=4,
-        help="Number of worker processes for GTF/GeneBED and FeatureBED generation.",
+        help="Number of worker processes; each worker handles one GTF.",
     )
     install_parser.add_argument(
         "--sizes-clean", nargs="?", const=1, type=int, default=None, metavar="0|1",
@@ -173,7 +177,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     blacklist_parser.add_argument(
         "--yes-liftover", action="store_true",
-        help="Accept generating a CrossMap script from hg38 for unsupported builds.",
+        help="Accept generating a UCSC liftOver script from hg38 for unsupported builds.",
     )
     blacklist_parser.add_argument(
         "-n",
@@ -194,7 +198,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     install_cgi_parser.add_argument(
         "--yes-liftover", action="store_true",
-        help="Accept generating a CrossMap script from hg38 for unsupported builds.",
+        help="Accept generating a UCSC liftOver script from hg38 for unsupported builds.",
     )
     install_cgi_parser.add_argument(
         "-n",
@@ -296,7 +300,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     cgi_parser.add_argument(
         "--yes-liftover", action="store_true",
-        help="For another build, download hg38 and write a CrossMap script.",
+        help="For another build, download hg38 and write a UCSC liftOver script.",
     )
     cgi_parser.add_argument(
         "-n",
@@ -364,7 +368,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     gencode_parser.add_argument(
         "-j", "--processes", type=int, default=4,
-        help="Number of worker processes for GTF-to-GeneBED conversion.",
+        help="Number of worker processes; each worker handles one GTF.",
     )
 
     _add_gencode_feature_parser(
@@ -537,7 +541,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             if unsupported and not args.yes_liftover:
                 raise UnknownResourceError(
                     "CGI has no packaged files for {}. Re-run with --yes-liftover "
-                    "to download hg38 and write CrossMap scripts.".format(
+                    "to download hg38 and write liftOver scripts.".format(
                         ", ".join(unsupported)
                     )
                 )
@@ -587,7 +591,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     print(_dry_run_gtf_url(dry_species, dry_version, args.data_dir))
                 return 0
             multi_spec = len(specs) > 1
-            for feature_species, feature_version in specs:
+            if args.gtf_path is None:
+                gtf_paths = download_gencode_gtf_batch(
+                    specs,
+                    output_dir=args.output_dir,
+                    gtf_url=args.url,
+                    overwrite=not args.no_overwrite,
+                    log_data_dir=args.data_dir,
+                    progress=_stderr_progress,
+                    cache_dir=args.data_dir,
+                    ucsc_annotation=args.ucsc_source,
+                )
+            else:
+                gtf_paths = tuple(Path(args.gtf_path).expanduser() for _ in specs)
+            jobs = []
+            for (feature_species, feature_version), gtf_path in zip(specs, gtf_paths):
                 output_dir = _gencode_feature_output_dir(
                     args.output_dir,
                     feature_species,
@@ -596,29 +614,30 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     args.prefix,
                     multi_spec,
                 )
-                targets = download_gencode_feature(
-                    feature_species,
-                    feature_version,
-                    output_dir,
-                    gtf_path=args.gtf_path,
-                    gtf_url=args.url,
-                    gene_bed=args.gene_bed,
-                    promoter_bp=args.promoter_bp,
-                    distal_bp=args.distal_bp,
-                    prefix=args.prefix,
-                    split_tss=not args.include_tss_base,
-                    tes_bp=args.tes_bp,
-                    promoter_down_bp=args.promoter_down_bp,
-                    distal_down_bp=args.distal_down_bp,
-                    tes_up_bp=args.tes_up_bp,
-                    overwrite=not args.no_overwrite,
-                    progress=_stderr_progress,
-                    cache_dir=args.data_dir,
-                    ucsc_annotation=args.ucsc_source,
-                    clean_cache=args.clean_cache,
-                    sizes_clean=args.sizes_clean,
-                    processes=args.processes,
+                jobs.append(
+                    {
+                        "species": feature_species,
+                        "version": feature_version,
+                        "output_dir": output_dir,
+                        "gtf_path": gtf_path,
+                        "gene_bed": args.gene_bed,
+                        "promoter_bp": args.promoter_bp,
+                        "distal_bp": args.distal_bp,
+                        "prefix": args.prefix,
+                        "split_tss": not args.include_tss_base,
+                        "tes_bp": args.tes_bp,
+                        "promoter_down_bp": args.promoter_down_bp,
+                        "distal_down_bp": args.distal_down_bp,
+                        "tes_up_bp": args.tes_up_bp,
+                        "overwrite": not args.no_overwrite,
+                        "cache_dir": args.data_dir,
+                        "ucsc_annotation": args.ucsc_source,
+                        "clean_cache": args.clean_cache,
+                        "sizes_clean": args.sizes_clean,
+                    }
                 )
+            targets_by_spec = download_gencode_feature_batch(jobs, args.processes)
+            for (feature_species, feature_version), targets in zip(specs, targets_by_spec):
                 for name in sorted(targets):
                     if multi_spec:
                         print(
@@ -666,7 +685,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             if source_genome != requested_genome and not args.yes_liftover:
                 raise UnknownResourceError(
                     "ChromHMM has hg19/hg38 files. Re-run with --yes-liftover "
-                    "to generate a CrossMap script for {}.".format(requested_genome)
+                    "to generate a liftOver script for {}.".format(requested_genome)
                 )
             targets = download_chromhmm(
                 data_dir=chromhmm_data_dir,
@@ -916,7 +935,7 @@ def _add_feature_generation_arguments(
     )
     parser.add_argument(
         "-j", "--processes", type=int, default=4,
-        help="Number of worker processes for GTF/GeneBED and FeatureBED generation.",
+        help="Number of worker processes; each worker handles one GTF.",
     )
     parser.add_argument(
         "-b",
@@ -1046,7 +1065,7 @@ def _add_chromhmm_parser(
     )
     parser.add_argument(
         "--yes-liftover", action="store_true",
-        help="Accept generating a CrossMap script from hg38 for another build.",
+        help="Accept generating a UCSC liftOver script from hg38 for another build.",
     )
     parser.add_argument(
         "-i",
@@ -1155,7 +1174,7 @@ def _add_segway_parser(
         action="store_true",
         help=(
             "For non-hg19 --species requests, download hg19 files and write a "
-            "CrossMap liftover script without prompting."
+            "liftOver script without prompting."
         ),
     )
     overwrite_group = parser.add_mutually_exclusive_group()
@@ -1180,7 +1199,7 @@ def _confirm_segway_liftover(genome: str) -> bool:
         return False
     prompt = (
         "Segway encyclopedia downloads are hg19 only. Download hg19 and write "
-        "a CrossMap liftover script for {}? [y/N] ".format(genome)
+        "a liftOver script for {}? [y/N] ".format(genome)
     )
     response = input(prompt).strip().lower()
     return response in {"y", "yes"}
@@ -1200,7 +1219,7 @@ def _write_external_liftover_scripts(
         ):
             raise UnknownResourceError(
                 "{} has no packaged {} file. Re-run with --yes-liftover to "
-                "write a CrossMap script from hg38.".format(
+                "write a liftOver script from hg38.".format(
                     target_genome, resource_name
                 )
             )
@@ -1222,7 +1241,7 @@ def _confirm_generic_liftover(resource_name: str, genome: str) -> bool:
     if not sys.stdin.isatty():
         return False
     response = input(
-        "{} has no packaged {} file. Generate a CrossMap script from hg38 "
+        "{} has no packaged {} file. Generate a liftOver script from hg38 "
         "for {}? [y/N] ".format(genome, resource_name, genome)
     )
     return response.strip().lower() in {"y", "yes"}

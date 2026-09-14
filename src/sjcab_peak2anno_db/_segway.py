@@ -303,6 +303,9 @@ OUTPUT_DIR={output_dir}
 INSTALL_ROOT={install_root}
 CHAIN_DIR={chain_dir}
 CHAIN="${{CHAIN_DIR}}/{chain_name}"
+TMP_DIR="${{TMPDIR:-/lustre_scratch/user_scratch/bxu2/TMPDIR/codex}}/sjcab-segway-liftover.$$"
+mkdir -p "${{TMP_DIR}}"
+trap 'rm -rf "${{TMP_DIR}}"' EXIT
 
 mkdir -p "${{CHAIN_DIR}}" "${{OUTPUT_DIR}}"
 if [ ! -s "${{CHAIN}}" ]; then
@@ -339,10 +342,20 @@ activate_existing_env() {{
 
 create_and_activate_env() {{
   if command -v micromamba >/dev/null 2>&1; then
+    if micromamba create -y -n "${{ENV_NAME}}" bioconda::ucsc-liftover; then
+      eval "$(micromamba shell hook -s bash)"
+      micromamba activate "${{ENV_NAME}}"
+      return 0
+    fi
     micromamba create -y -n "${{ENV_NAME}}" -c conda-forge -c bioconda crossmap
     eval "$(micromamba shell hook -s bash)"
     micromamba activate "${{ENV_NAME}}"
   elif command -v mamba >/dev/null 2>&1; then
+    if mamba create -y -n "${{ENV_NAME}}" bioconda::ucsc-liftover; then
+      eval "$(mamba shell hook -s bash)"
+      mamba activate "${{ENV_NAME}}"
+      return 0
+    fi
     mamba create -y -n "${{ENV_NAME}}" -c conda-forge -c bioconda crossmap
     if command -v conda >/dev/null 2>&1; then
       eval "$(conda shell.bash hook)"
@@ -352,11 +365,16 @@ create_and_activate_env() {{
       mamba activate "${{ENV_NAME}}"
     fi
   elif command -v conda >/dev/null 2>&1; then
+    if conda create -y -n "${{ENV_NAME}}" bioconda::ucsc-liftover; then
+      eval "$(conda shell.bash hook)"
+      conda activate "${{ENV_NAME}}"
+      return 0
+    fi
     conda create -y -n "${{ENV_NAME}}" -c conda-forge -c bioconda crossmap
     eval "$(conda shell.bash hook)"
     conda activate "${{ENV_NAME}}"
   else
-    echo "micromamba, mamba, or conda is required to install CrossMap" >&2
+    echo "micromamba, mamba, or conda is required to install liftOver or CrossMap" >&2
     exit 1
   fi
 }}
@@ -365,15 +383,28 @@ if ! activate_existing_env; then
   create_and_activate_env
 fi
 
-if command -v CrossMap >/dev/null 2>&1; then
+if command -v liftOver >/dev/null 2>&1; then
+  LIFTOVER=(liftOver)
+  LIFTOVER_MODE=ucsc
+elif command -v CrossMap >/dev/null 2>&1; then
   CROSSMAP=(CrossMap)
+  LIFTOVER_MODE=crossmap
 elif command -v CrossMap.py >/dev/null 2>&1; then
   CROSSMAP=(CrossMap.py)
+  LIFTOVER_MODE=crossmap
 else
-  echo "CrossMap is not available in conda environment ${{ENV_NAME}}." >&2
+  echo "liftOver and CrossMap are not available in conda environment ${{ENV_NAME}}." >&2
   echo "Install it there manually or remove the env so this script can recreate it." >&2
   exit 1
 fi
+
+run_liftover() {{
+  if [ "${{LIFTOVER_MODE}}" = "ucsc" ]; then
+    "${{LIFTOVER[@]}}" "$@"
+  else
+    "${{CROSSMAP[@]}}" bed "$@"
+  fi
+}}
 
 for bed in "${{INPUT_DIR}}"/*.bed.gz "${{INPUT_DIR}}"/interpreted/*.bed.gz; do
   [ -e "${{bed}}" ] || continue
@@ -384,7 +415,12 @@ for bed in "${{INPUT_DIR}}"/*.bed.gz "${{INPUT_DIR}}"/interpreted/*.bed.gz; do
     continue
   fi
   mkdir -p "$(dirname "${{out}}")"
-  "${{CROSSMAP[@]}}" bed "${{CHAIN}}" "${{bed}}" "${{out}}"
+  input="${{bed}}"
+  if [ "${{LIFTOVER_MODE}}" = "ucsc" ]; then
+    input="${{TMP_DIR}}/$(basename "${{bed}}" .bed.gz).bed"
+    gzip -dc "${{bed}}" > "${{input}}"
+  fi
+  run_liftover "${{CHAIN}}" "${{input}}" "${{out}}"
   [ -e "${{out}}.unmap" ] || : > "${{out}}.unmap"
   gzip -f "${{out}}"
 done

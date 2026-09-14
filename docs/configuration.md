@@ -16,8 +16,9 @@
   is 90 days; a negative value removes the current cached GTF immediately.
 - `--sizes-clean [0|1]`: create `.sizes.clean` files by default; use `0` to
   disable them.
-- `-j`, `--processes N`: worker processes for GTF-to-GeneBED and FeatureBED
-  generation. The default is `4`.
+- `-j`, `--processes N`: worker processes, with one GTF handled by each worker.
+  GTF downloads are sequential with a short randomized pause, and conversion
+  within each worker is single-process. The default is `4`.
 - `-g`, `--gtf-path`: use a local GTF.
 - `-u`, `--url`: override the resolved GTF URL.
 - `--ucsc-source {ens,refseq}`: choose the UCSC gene table.
