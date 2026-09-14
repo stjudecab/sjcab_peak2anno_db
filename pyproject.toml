@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61", "setuptools-scm>=8", "wheel"]
+requires = ["setuptools>=61", "versioningit", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -37,8 +37,11 @@ sjcab-peak2anno-db = "sjcab_peak2anno_db._cli:main"
 package-dir = { "" = "src" }
 include-package-data = true
 
-[tool.setuptools_scm]
-version_file = "src/sjcab_peak2anno_db/_version.py"
+[tool.versioningit]
+default-version = "0.0.0"
+
+[tool.versioningit.tag]
+#regex = '^v?(?P<version>\d+\.\d+\.\d+)$'
 
 [tool.setuptools.packages.find]
 where = ["src"]

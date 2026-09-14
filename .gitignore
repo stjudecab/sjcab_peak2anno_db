@@ -27,6 +27,7 @@ conda-bld/
 /*.dedup*.bed
 /m_H3K4me3-AB2-P21.common.bed
 
+
 # Keep only package-declared data under src.
 /src/sjcab_peak2anno_db/data/*
 !/src/sjcab_peak2anno_db/data/blacklists/
@@ -43,3 +44,5 @@ conda-bld/
 !/src/sjcab_peak2anno_db/data/gtf_builds.tsv
 !/src/sjcab_peak2anno_db/data/sizes/
 !/src/sjcab_peak2anno_db/data/sizes/**
+
+src/sjcab_peak2anno_db/_version.py

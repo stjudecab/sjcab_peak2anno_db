@@ -1,0 +1,44 @@
+{% set name = "sjcab_peak2anno_db" %}
+{% set version = environ.get("GIT_DESCRIBE_TAG", "0.0.0") %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  path: ..
+
+build:
+  number: 0
+  noarch: python
+  script: {{ PYTHON }} -m pip install . -vv --no-deps
+  entry_points:
+    - sjcab-peak2anno-db = sjcab_peak2anno_db.cli:main
+    - sjcab_peak2anno_db = sjcab_peak2anno_db.cli:main
+
+requirements:
+  host:
+    - python >=3.7
+    - pip
+    - setuptools >=61
+    - setuptools-scm >=8
+    - wheel
+  run:
+    - python >=3.7
+
+test:
+  imports:
+    - sjcab_peak2anno_db
+  commands:
+    - sjcab-peak2anno-db list
+
+about:
+  home: https://github.com/stjudecab/sjcab_peak2anno_db
+  doc_url: https://sjcab-peak2anno-db.readthedocs.io/
+  dev_url: https://github.com/stjudecab/sjcab_peak2anno_db
+  issue_url: https://github.com/stjudecab/sjcab_peak2anno_db/issues
+  summary: Gene-backed peak-to-annotation BED resources for SJ/CAB workflows.
+
+extra:
+  recipe-maintainers:
+    - stjudecab
