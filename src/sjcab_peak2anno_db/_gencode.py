@@ -22,6 +22,7 @@ from ._config import (
     clean_cache_files,
     configured_sizes_clean,
     configured_stale_seconds,
+    effective_processes,
 )
 from ._download import ProgressCallback, download_file, report_progress
 from ._download_log import record_download_url
@@ -1343,8 +1344,9 @@ def regenerate_gencode_beds(
         (species, version, gtf_path, output_dir, overwrite)
         for species, version, gtf_path in specs
     ]
-    if processes > 1 and len(jobs) > 1:
-        with ProcessPoolExecutor(max_workers=processes) as executor:
+    worker_processes = effective_processes(processes)
+    if worker_processes > 1 and len(jobs) > 1:
+        with ProcessPoolExecutor(max_workers=worker_processes) as executor:
             return tuple(executor.map(_regenerate_gencode_bed_worker, jobs))
     return tuple(_regenerate_gencode_bed_worker(job) for job in jobs)
 

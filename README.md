@@ -74,7 +74,7 @@ Common option styles:
   `--sizes-clean 0` to disable them. 
 - `-j`, `--processes N`: use `N` workers, one GTF per worker. GTF downloads are
   sequential with a short randomized pause; conversion within each worker is
-  single-process. Default is `4`.
+  single-process. Default is `4`, capped at the CPUs allocated to the job.
 - `-g`, `--gtf-path FILE`: use an existing local GTF instead of downloading
   one.
 - `-u`, `--url URL`: override the resolved GTF URL.

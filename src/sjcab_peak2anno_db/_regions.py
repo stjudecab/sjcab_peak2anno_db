@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
 from ._download import ProgressCallback, report_progress
-from ._config import clean_cache_files, configured_sizes_clean
+from ._config import clean_cache_files, configured_sizes_clean, effective_processes
 from ._download_log import record_download_url
 from ._derive import _parse_bed_fields, _site_interval
 from ._gencode import (
@@ -254,7 +254,7 @@ def download_gencode_feature(
             sizes_clean=sizes_clean,
         ),
         collector_backend=collector_backend,
-        processes=processes,
+        processes=1,
     )
     #report_progress(progress, "download-feature: legacy BED files done")
     outputs["list"] = write_gencode_feature_list(outputs, target_dir, label)
@@ -283,8 +283,9 @@ def download_gencode_feature_batch(
     """Run one single-process FeatureBED conversion per downloaded GTF."""
 
     queued = tuple(dict(job) for job in jobs)
-    if processes > 1 and len(queued) > 1:
-        with ProcessPoolExecutor(max_workers=processes) as executor:
+    worker_processes = effective_processes(processes)
+    if worker_processes > 1 and len(queued) > 1:
+        with ProcessPoolExecutor(max_workers=worker_processes) as executor:
             return tuple(executor.map(_download_gencode_feature_worker, queued))
     return tuple(_download_gencode_feature_worker(job) for job in queued)
 
@@ -382,7 +383,7 @@ def write_legacy_gencode_feature_unions(
     chrom_sizes: Optional[PathLike] = None,
     backend: str = "auto",
     collector_backend: str = "python",
-    processes: int = 4,
+    processes: int = 1,
     promoter_down_bp: Optional[Union[int, str]] = None,
     distal_down_bp: Optional[Union[int, str]] = None,
     tes_up_bp: Optional[Union[int, str]] = None,

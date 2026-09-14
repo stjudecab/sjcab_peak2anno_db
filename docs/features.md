@@ -28,7 +28,8 @@ Main options:
 - `--gene-bed`/`-b`: existing GeneBED.
 - `--gtf-path`/`-g`: existing local GTF.
 - `--processes`/`-j`: parallel processing of independent GTFs. Downloads are
-  sequential and conversion within each worker is single-process.
+  sequential and conversion within each worker is single-process. The worker
+  count is capped at the CPUs allocated to the job.
 
 ## Output layout
 

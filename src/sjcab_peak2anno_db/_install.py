@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Iterable, Optional, Tuple, Union
 
 from ._download import ProgressCallback, report_progress
-from ._config import load_config, parse_species_version_values
+from ._config import effective_processes, load_config, parse_species_version_values
 from ._derive import write_deduplong
 from ._gencode import data_species_name, download_gencode_gtf_batch
 from ._external import (
@@ -214,6 +214,14 @@ def install_gencode_features(
 
     if processes < 1:
         raise ValueError("processes must be at least 1")
+    worker_processes = effective_processes(processes)
+    if worker_processes != processes:
+        report_progress(
+            progress,
+            "install-feature: requested {} workers but only {} CPUs are allocated; using {}".format(
+                processes, worker_processes, worker_processes
+            ),
+        )
     report_progress(progress, "install-feature: started")
     report_progress(progress, "install-feature: installing GENCODE BEDs")
     target_root = install_gencode_beds(data_dir, overwrite=overwrite)
@@ -275,8 +283,8 @@ def install_gencode_features(
             }
         )
 
-    if processes > 1 and len(jobs) > 1:
-        with ProcessPoolExecutor(max_workers=processes) as executor:
+    if worker_processes > 1 and len(jobs) > 1:
+        with ProcessPoolExecutor(max_workers=worker_processes) as executor:
             tuple(executor.map(_install_gencode_feature_set_worker, jobs))
     else:
         for job in jobs:

@@ -18,7 +18,8 @@
   disable them.
 - `-j`, `--processes N`: worker processes, with one GTF handled by each worker.
   GTF downloads are sequential with a short randomized pause, and conversion
-  within each worker is single-process. The default is `4`.
+  within each worker is single-process. The default is `4`, capped at the CPUs
+  allocated to the current job.
 - `-g`, `--gtf-path`: use a local GTF.
 - `-u`, `--url`: override the resolved GTF URL.
 - `--ucsc-source {ens,refseq}`: choose the UCSC gene table.

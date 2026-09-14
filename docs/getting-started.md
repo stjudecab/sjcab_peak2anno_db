@@ -35,7 +35,7 @@ sjcab-peak2anno-db install-feature vicpac2
 
 Use `-j/--processes` to process independent GTFs in parallel. GTF downloads are
 sequential with a short randomized pause, and conversion within each worker is
-single-process:
+single-process. The worker count is capped at the CPUs allocated to the job:
 
 ```bash
 sjcab-peak2anno-db download-feature cat,dog,horse -j 3

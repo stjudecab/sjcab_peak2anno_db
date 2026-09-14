@@ -126,6 +126,18 @@ def configured_txt_score_column() -> int:
     return load_config().txt_score_column
 
 
+def effective_processes(requested: int) -> int:
+    """Limit workers to the CPUs allocated to the current process."""
+
+    if requested < 1:
+        raise ValueError("processes must be at least 1")
+    try:
+        allocated = len(os.sched_getaffinity(0))
+    except AttributeError:
+        return requested
+    return max(1, min(requested, allocated))
+
+
 def clean_cache_files(
     cache_dir: Path,
     policy=None,
