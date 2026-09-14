@@ -9,7 +9,7 @@ BED. The default output prefix is the promoter size, normally `2kb`.
 sjcab-peak2anno-db install-feature hg38 v31
 sjcab-peak2anno-db download-feature hg38 v31 -o feature_downloads
 sjcab-peak2anno-db download-feature hg38 v31 \
-  -p 2kb -D 50kb -e 2kb -j 8
+  -p 2k -D 50kb -e 2k
 ```
 
 Omitting the version for `install-feature` uses `def`. `-name` stores a species

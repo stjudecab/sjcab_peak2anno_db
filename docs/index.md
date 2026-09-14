@@ -18,6 +18,7 @@ GeneBED and derived FeatureBED resources.
 
 ```bash
 pip install sjcab_peak2anno_db
+conda install stjudecab::sjcab_peak2anno_db
 sjcab-peak2anno-db install
 sjcab-peak2anno-db list
 ```

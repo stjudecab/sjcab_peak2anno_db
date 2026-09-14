@@ -40,6 +40,8 @@ If the XDG file does not exist, a fully commented template is created. RC keys
 use the same names as environment variables. The environment prefix is
 `SJCAB_PEAK2ANNO_DB_`.
 
+### Environment variable defaults are below can be override
+
 ```text
 SJCAB_PEAK2ANNO_DB_PATH=~/.sjcab_peak2anno_db
 SJCAB_PEAK2ANNO_DB_INSTALL_OPTIONS=genebed,feature,blacklists,cgi
@@ -48,38 +50,16 @@ SJCAB_PEAK2ANNO_DB_INSTALL_VERSIONS=v31,v31lift37,vM22,vM39
 SJCAB_PEAK2ANNO_DB_VERSION_STALE_DAYS=90
 SJCAB_PEAK2ANNO_DB_SIZESCLEAN=1
 SJCAB_PEAK2ANNO_DB_CLEANCACHE=90
-SJCAB_PEAK2ANNO_DB_PEAK_TXT_DELIMITER=:-*=/^;_%$,
+SJCAB_PEAK2ANNO_DB_PEAK_TXT_DELIMITER=:-*/^;_%$,
 SJCAB_PEAK2ANNO_DB_BED_SCORE_COLUMN=5
 SJCAB_PEAK2ANNO_DB_TXT_SCORE_COLUMN=2
 ```
 
-### Environment variable defaults
-
-Unless overridden by a command-line option or configuration file, the
-environment variables use these defaults:
-
-| Variable | Default |
-| --- | --- |
-| `SJCAB_PEAK2ANNO_DB_PATH` | `~/.sjcab_peak2anno_db` |
-| `SJCAB_PEAK2ANNO_DB_INSTALL_OPTIONS` | `genebed,feature,blacklists,cgi` |
-| `SJCAB_PEAK2ANNO_DB_INSTALL_SPECIES` | `hg38,hg19,mm10,mm39` |
-| `SJCAB_PEAK2ANNO_DB_INSTALL_VERSIONS` | `v31,v31lift37,vM22,vM39` |
-| `SJCAB_PEAK2ANNO_DB_VERSION_STALE_DAYS` | `90` days |
-| `SJCAB_PEAK2ANNO_DB_SIZESCLEAN` | `1` (create `.sizes.clean`) |
-| `SJCAB_PEAK2ANNO_DB_CLEANCACHE` | `90` days |
-| `SJCAB_PEAK2ANNO_DB_PEAK_TXT_DELIMITER` | `:-*=/^;_%$,` |
-| `SJCAB_PEAK2ANNO_DB_BED_SCORE_COLUMN` | `5` |
-| `SJCAB_PEAK2ANNO_DB_TXT_SCORE_COLUMN` | `2` |
-
-`SJCAB_PEAK2ANNO_CONFIG` has no fixed filename default; when unset, the
-configuration search uses `$XDG_CONFIG_HOME/sjcab_peak2anno/.sjcab_peak2anno.rc`
-and then `~/.sjcab_peak2anno.rc`.
-
-`VERSION_STALE_DAYS` controls refresh of Ensembl `VERSION` and species
+`VERSION_STALE_DAYS` controls refresh of Ensembl `VERSION` and `SPECIES`
 catalogues. `SIZESCLEAN=0` disables `.sizes.clean`; `CLEANCACHE` controls cache
 cleanup age. Explicit command-line options take precedence.
 
 `PEAK_TXT_DELIMITER` controls delimiters inside text-mode `peak` regions; it is
 not a command-line option. Selector format is auto-detected once per file from
-the first data row: BED selectors use the configured `BED_SCORE_COLUMN`
+the first data none-header row: BED selectors use the configured `BED_SCORE_COLUMN`
 (default `5`), while text selectors use `TXT_SCORE_COLUMN` (default `2`).

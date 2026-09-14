@@ -104,7 +104,7 @@ SJCAB_PEAK2ANNO_DB_INSTALL_VERSIONS=v31,v31lift37,vM22,vM39
 SJCAB_PEAK2ANNO_DB_VERSION_STALE_DAYS=90
 SJCAB_PEAK2ANNO_DB_SIZESCLEAN=1
 SJCAB_PEAK2ANNO_DB_CLEANCACHE=90
-SJCAB_PEAK2ANNO_DB_PEAK_TXT_DELIMITER=:-*=/^;_%$,
+SJCAB_PEAK2ANNO_DB_PEAK_TXT_DELIMITER=:-*/^;_%$,
 SJCAB_PEAK2ANNO_DB_BED_SCORE_COLUMN=5
 SJCAB_PEAK2ANNO_DB_TXT_SCORE_COLUMN=2
 ```
@@ -400,7 +400,7 @@ sjcab-peak2anno-db download-chromhmm -o chromhmm_downloads -m 15 -t brain
 
 ChromHMM defaults to Roadmap hg19 BED files. Use `--species hg38`/`-s hg38` for
 Roadmap lifted-over BEDs. Other UCSC builds use `--yes-liftover` and the hg38
-chain files listed at `https://hgdownload.soe.ucsc.edu/goldenPath/hg38/liftOver/`.
+chain files listed at [UCSC liftOver](https://hgdownload.soe.ucsc.edu/goldenPath/hg38/liftOver/).
 Select records with epigenome IDs (`--ids`/`-i`),
 fuzzy tissue/group text (`--tissue`/`-t`), or fuzzy sample/cell-line text
 (`--cellline`/`-c`).
@@ -413,7 +413,7 @@ Output layout:
 ```
 
 `metadata.tsv` includes the downloaded path, genome (`hg19` or `hg38`), state
-model, Roadmap epigenome ID, and normalized sample metadata.
+model, [Roadmap epigenome ID](https://egg2.wustl.edu/roadmap/web_portal/), and normalized sample metadata.
 
 Python API:
 
@@ -427,9 +427,8 @@ db.download_chromhmm(model=25, genome="hg19", cellline="GM12878")
 ## Segway
 
 Segway commands download the hg19 Segway encyclopedia of human regulatory
-elements by trying the ENCODE publication page first
-(`https://www.encodeproject.org/publications/94941f71-80c8-43d2-809b-25161efc3be0/`),
-then falling back to `https://noble.gs.washington.edu/proj/encyclopedia/`.
+elements by trying the [ENCODE publication page](https://www.encodeproject.org/publications/94941f71-80c8-43d2-809b-25161efc3be0/) first,
+then falling back to [Segway Lab Site](https://noble.gs.washington.edu/proj/encyclopedia/).
 If ENCODE returns a human-verification page or no Segway download links, the CLI
 prints a fallback message and records only the source that actually provided the
 downloaded files.

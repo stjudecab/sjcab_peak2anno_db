@@ -43,8 +43,7 @@ custom species name; the mapping is recorded in `custom.name.tsv`.
 ```bash
 sjcab-peak2anno-db download-genebed mm10 vM22 \
   --gtf-path gencode.vM22.annotation.gtf.gz \
-  --output-dir annotations \
-  --processes 8
+  --output-dir annotations
 ```
 
 Use `--gene-type` repeatedly to restrict GENCODE types. See

@@ -29,6 +29,8 @@ The supported install components are `genebed` (GeneBEDs), `feature`, blacklists
 sjcab-peak2anno-db download-genebed hg38 v31 -o annotations
 sjcab-peak2anno-db download-feature mm10 vM22 -o annotations
 sjcab-peak2anno-db install-feature cat def
+sjcab-peak2anno-db install-feature dog 115
+sjcab-peak2anno-db install-feature vicpac2
 ```
 
 Use `-j/--processes` to process independent GTFs in parallel. GTF downloads are
@@ -36,7 +38,7 @@ sequential with a short randomized pause, and conversion within each worker is
 single-process:
 
 ```bash
-sjcab-peak2anno-db download-feature hg38 v31 -j 8
+sjcab-peak2anno-db download-feature cat,dog,horse -j 3
 ```
 
 ## Python API
