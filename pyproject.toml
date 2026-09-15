@@ -40,8 +40,15 @@ include-package-data = true
 [tool.versioningit]
 default-version = "0.0.0"
 
+[tool.versioningit.format]
+# Keep the latest tag when only uncommitted working-tree changes are present.
+distance = "{base_version}"
+dirty = "{base_version}"
+distance-dirty = "{base_version}"
+
 [tool.versioningit.write]
 file = "src/sjcab_peak2anno_db/_generated_version.py"
+template = '__version__ = "{version}"\n'
 
 [tool.setuptools.packages.find]
 where = ["src"]
