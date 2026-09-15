@@ -48,7 +48,7 @@ distance-dirty = "{base_version}"
 
 [tool.versioningit.write]
 file = "src/sjcab_peak2anno_db/_generated_version.py"
-template = '__version__ = "{version}"\n'
+template = '__version__ = "{version}"'
 
 [tool.setuptools.packages.find]
 where = ["src"]
