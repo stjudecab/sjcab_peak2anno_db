@@ -3,6 +3,7 @@ site_description: Gene-backed peak-to-annotation BED resources for SJ/CAB workfl
 site_url: https://sjcab-peak2anno-db.readthedocs.io/
 repo_url: https://github.com/stjudecab/sjcab_peak2anno_db
 repo_name: stjudecab/sjcab_peak2anno_db
+edit_uri: edit/main/docs/
 
 docs_dir: docs
 theme:

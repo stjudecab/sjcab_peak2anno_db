@@ -45,4 +45,4 @@ conda-bld/
 !/src/sjcab_peak2anno_db/data/sizes/
 !/src/sjcab_peak2anno_db/data/sizes/**
 
-src/sjcab_peak2anno_db/_version.py
+src/sjcab_peak2anno_db/_generated_version.py

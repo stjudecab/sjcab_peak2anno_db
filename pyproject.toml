@@ -40,8 +40,8 @@ include-package-data = true
 [tool.versioningit]
 default-version = "0.0.0"
 
-[tool.versioningit.tag]
-#regex = '^v?(?P<version>\d+\.\d+\.\d+)$'
+[tool.versioningit.write]
+file = "src/sjcab_peak2anno_db/_generated_version.py"
 
 [tool.setuptools.packages.find]
 where = ["src"]

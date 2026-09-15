@@ -13,15 +13,15 @@ build:
   noarch: python
   script: {{ PYTHON }} -m pip install . -vv --no-deps
   entry_points:
-    - sjcab-peak2anno-db = sjcab_peak2anno_db.cli:main
-    - sjcab_peak2anno_db = sjcab_peak2anno_db.cli:main
+    - sjcab-peak2anno-db = sjcab_peak2anno_db._cli:main
+    - sjcab_peak2anno_db = sjcab_peak2anno_db._cli:main
 
 requirements:
   host:
     - python >=3.7
     - pip
     - setuptools >=61
-    - setuptools-scm >=8
+    - versioningit
     - wheel
   run:
     - python >=3.7
