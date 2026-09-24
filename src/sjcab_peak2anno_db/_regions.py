@@ -41,6 +41,8 @@ GENCODE_REGION_TYPES = ("exon", "intron", "tes", "intergenic")
 REGION_TYPES = TSS_FLANK_REGION_TYPES + GENCODE_REGION_TYPES
 GENCODE_FEATURE_LIST_ORDER = (
     "promoter.up",
+    "5utr",
+    "3utr",
     "promoter.down",
     "exon",
     "intron",
@@ -49,6 +51,30 @@ GENCODE_FEATURE_LIST_ORDER = (
     "dis3",
     "intergenic",
 )
+GENCODE_FEATURE_FULL_NAMES = {
+    "promoter.up": "Promoter_Upstream",
+    "5utr": "5'_Untranslated_Regions",
+    "3utr": "3'_Untranslated_Regions",
+    "promoter.down": "Promoter_Downstream",
+    "exon": "Exons",
+    "intron": "Introns",
+    "tes": "Transcription_End_Sites",
+    "dis5": "Distal_5_Prime",
+    "dis3": "Distal_3_Prime",
+    "intergenic": "Intergenic_Regions",
+}
+GENCODE_FEATURE_NAMES = {
+    "promoter.up": "Promoter.Up",
+    "5utr": "5UTR",
+    "3utr": "3UTR",
+    "promoter.down": "Promoter.Down",
+    "exon": "Exon",
+    "intron": "Intron",
+    "tes": "TES",
+    "dis5": "Dis5",
+    "dis3": "Dis3",
+    "intergenic": "Intergenic",
+}
 _NCBI_EUTILS_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/{}"
 
 
@@ -349,17 +375,25 @@ def write_gencode_feature_list(
     """Write an ordered list of generated GENCODE FeatureBED files."""
 
     target_dir = Path(output_dir).expanduser()
-    list_path = target_dir / "order.lst"
-    tmp_path = list_path.with_name(list_path.name + ".tmp")
-    try:
-        with tmp_path.open("w", encoding="utf-8") as handle:
-            for region_type in GENCODE_FEATURE_LIST_ORDER:
-                handle.write("{}\n".format(outputs[region_type].name))
-        tmp_path.replace(list_path)
-    finally:
-        if tmp_path.exists():
-            tmp_path.unlink()
-    return list_path
+    list_names = ("order.lst", "order.utr.lst")
+    for list_name in list_names:
+        list_path = target_dir / list_name
+        tmp_path = list_path.with_name(list_path.name + ".tmp")
+        try:
+            with tmp_path.open("w", encoding="utf-8") as handle:
+                for region_type in GENCODE_FEATURE_LIST_ORDER:
+                    handle.write(
+                        "{}\t{}\t{}\n".format(
+                            outputs[region_type].name,
+                            GENCODE_FEATURE_NAMES[region_type],
+                            GENCODE_FEATURE_FULL_NAMES[region_type],
+                        )
+                    )
+            tmp_path.replace(list_path)
+        finally:
+            if tmp_path.exists():
+                tmp_path.unlink()
+    return target_dir / "order.lst"
 
 
 def gencode_feature_prefix(
@@ -1078,7 +1112,10 @@ def _run_awk_collector_inputs(
     ).format(shlex.quote(str(gtf_path)))
     gtf_command = (
         "{} | awk 'BEGIN{{OFS=\"\\t\"}} /^##sequence-region/{{print}} "
-        "$0 !~ /^#/ && $3==\"exon\"{{print}}' > {}"
+        "$0 !~ /^#/ && (tolower($3)==\"exon\" || tolower($3)==\"cds\" || "
+        "tolower($3)==\"utr\" || tolower($3)==\"five_prime_utr\" || "
+        "tolower($3)==\"three_prime_utr\" || tolower($3)==\"5utr\" || "
+        "tolower($3)==\"3utr\"){{print}}' > {}"
     ).format(gtf_input, shlex.quote(str(filtered_gtf)))
     bed_command = "awk '$0 !~ /^#/ && NF>=6' {} > {}".format(
         shlex.quote(str(gene_bed)), shlex.quote(str(sorted_gene_bed))
@@ -1114,8 +1151,20 @@ def _run_pybedtools_collector_inputs(
     BedTool(str(gene_bed)).sort().saveas(str(sorted_gene_bed))
     with filtered_gtf.open("w", encoding="utf-8") as handle:
         for line in BedTool(str(gtf_path)):
-            if len(line.fields) >= 3 and line.fields[2] == "exon":
+            if len(line.fields) >= 3 and _is_utr_feature_gtf_row(line.fields[2]):
                 handle.write(str(line))
+
+
+def _is_utr_feature_gtf_row(feature: str) -> bool:
+    return re.sub(r"[^a-z0-9]", "", feature.lower()) in {
+        "exon",
+        "cds",
+        "utr",
+        "5utr",
+        "fiveprimeutr",
+        "3utr",
+        "threeprimeutr",
+    }
 
 
 def _collect_legacy_gencode_feature_regions_python(
@@ -1206,7 +1255,14 @@ def _collect_legacy_gencode_feature_regions_python(
         intervals["_dis3_inner"],
         chrom_order,
     )
-    for region_type in ("promoter.up", "promoter.down", "exon", "tes"):
+    for region_type in (
+        "promoter.up",
+        "5utr",
+        "3utr",
+        "promoter.down",
+        "exon",
+        "tes",
+    ):
         merged[region_type] = merge_intervals(
             intervals[region_type],
             chrom_order,
@@ -1263,6 +1319,9 @@ def _collect_legacy_gtf_regions(
     chrom_lengths: Dict[str, int],
     chrom_max_end: Dict[str, int],
 ) -> None:
+    transcript_cds = {}  # type: Dict[str, Tuple[int, int]]
+    generic_utrs = []  # type: List[Tuple[str, int, int, str, str]]
+
     with _open_text(gtf_path) as handle:
         for line_number, line in enumerate(handle, start=1):
             if not line.strip():
@@ -1280,7 +1339,16 @@ def _collect_legacy_gtf_regions(
                 )
 
             feature = fields[2]
-            if feature != "exon":
+            normalized_feature = re.sub(r"[^a-z0-9]", "", feature.lower())
+            if normalized_feature not in {
+                "exon",
+                "cds",
+                "utr",
+                "5utr",
+                "fiveprimeutr",
+                "3utr",
+                "threeprimeutr",
+            }:
                 continue
 
             chrom = fields[0]
@@ -1294,8 +1362,61 @@ def _collect_legacy_gtf_regions(
             if chrom not in chrom_seen:
                 chrom_seen[chrom] = None
             _record_interval_max_end(chrom_max_end, chrom, end)
-            intervals["exon"].setdefault(chrom, []).append((start, end))
-            transcript_exons.setdefault(transcript_id, []).append((chrom, start, end))
+            if normalized_feature == "exon":
+                intervals["exon"].setdefault(chrom, []).append((start, end))
+                transcript_exons.setdefault(transcript_id, []).append(
+                    (chrom, start, end)
+                )
+            elif normalized_feature == "cds":
+                previous = transcript_cds.get(transcript_id)
+                if previous is None:
+                    transcript_cds[transcript_id] = (start, end)
+                else:
+                    transcript_cds[transcript_id] = (
+                        min(previous[0], start),
+                        max(previous[1], end),
+                    )
+            elif normalized_feature == "utr":
+                generic_utrs.append(
+                    (transcript_id, chrom, start, end, fields[6])
+                )
+            else:
+                region_type = (
+                    "5utr"
+                    if normalized_feature in {"5utr", "fiveprimeutr"}
+                    else "3utr"
+                )
+                intervals[region_type].setdefault(chrom, []).append((start, end))
+
+    for transcript_id, chrom, start, end, strand in generic_utrs:
+        cds = transcript_cds.get(transcript_id)
+        region_type = _classify_generic_utr(start, end, strand, cds)
+        if region_type is not None:
+            intervals[region_type].setdefault(chrom, []).append((start, end))
+
+
+def _classify_generic_utr(
+    start: int,
+    end: int,
+    strand: str,
+    cds: Optional[Tuple[int, int]],
+) -> Optional[str]:
+    """Classify a GTF ``UTR`` row using its transcript CDS boundary."""
+
+    if cds is None:
+        return None
+    cds_start, cds_end = cds
+    if strand == "-":
+        if start >= cds_end:
+            return "5utr"
+        if end <= cds_start:
+            return "3utr"
+    else:
+        if end <= cds_start:
+            return "5utr"
+        if start >= cds_end:
+            return "3utr"
+    return None
 
 
 def _collect_legacy_gene_bed_regions(

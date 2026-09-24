@@ -11,6 +11,8 @@ Install the default resource bundle:
 
 ```bash
 sjcab-peak2anno-db install
+sjcab-peak2anno-db install def
+sjcab-peak2anno-db install default
 ```
 
 Install selected components:
@@ -21,7 +23,8 @@ sjcab-peak2anno-db install -c genebed -c feature
 ```
 
 The supported install components are `genebed` (GeneBEDs), `feature`, blacklists, and
-`cgi`. `list` shows the bundled registry, while `path` prints a resource path.
+`cgi`. The three commands above install the complete default bundle. `list` shows
+the bundled registry, while `path` prints a resource path.
 
 ## First downloaded resources
 

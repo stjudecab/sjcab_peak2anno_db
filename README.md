@@ -15,6 +15,8 @@ conda install stjudecab::sjcab_peak2anno_db
 
 export SJCAB_PEAK2ANNO_DB_PATH=~/.sjcab_peak2anno_db
 sjcab-peak2anno-db install # install default for "GeneBEDs FeatureBEDs blacklists cgi"
+sjcab-peak2anno-db install def # same default installation
+sjcab-peak2anno-db install default # same default installation
 sjcab-peak2anno-db install genebed feature # install selected default group
 sjcab-peak2anno-db list # list default bundle
 
@@ -330,6 +332,8 @@ Default installed layout:
 
 ```text
 {db-path}/feature/{species}/{version}/{prefix}/{prefix}.promoter.up.bed
+{db-path}/feature/{species}/{version}/{prefix}/{prefix}.5utr.bed
+{db-path}/feature/{species}/{version}/{prefix}/{prefix}.3utr.bed
 {db-path}/feature/{species}/{version}/{prefix}/{prefix}.promoter.down.bed
 {db-path}/feature/{species}/{version}/{prefix}/{prefix}.exon.bed
 {db-path}/feature/{species}/{version}/{prefix}/{prefix}.intron.bed
@@ -338,21 +342,28 @@ Default installed layout:
 {db-path}/feature/{species}/{version}/{prefix}/{prefix}.dis3.bed
 {db-path}/feature/{species}/{version}/{prefix}/{prefix}.intergenic.bed
 {db-path}/feature/{species}/{version}/{prefix}/order.lst
+{db-path}/feature/{species}/{version}/{prefix}/order.utr.lst
 {db-path}/feature/{species}/def -> {version}/{prefix}
 ```
 
-`order.lst` contains:
+`order.lst` and `order.utr.lst` contain tab-separated rows with the BED
+filename, the feature name, and its full name:
 
 ```text
-promoter.up
-promoter.down
-exon
-intron
-tes
-dis5
-dis3
-intergenic
+{prefix}.promoter.up.bed  Promoter.Up   Promoter_Upstream
+{prefix}.5utr.bed         5UTR          Five_Prime_Untranslated_Regions
+{prefix}.3utr.bed         3UTR          Three_Prime_Untranslated_Regions
+{prefix}.promoter.down.bed Promoter.Down Promoter_Downstream
+{prefix}.exon.bed         Exon          Exons
+{prefix}.intron.bed       Intron        Introns
+{prefix}.tes.bed          TES           Transcription_End_Sites
+{prefix}.dis5.bed         Dis5          Distal_5_Prime
+{prefix}.dis3.bed         Dis3          Distal_3_Prime
+{prefix}.intergenic.bed   Intergenic    Intergenic_Regions
 ```
+
+Both files use the UTR-aware priority order: `Promoter.Up > 5utr > 3utr >
+Promoter.Down > exon > intron > TES > Dis5 > Dis3 > Intergenic`.
 
 Main feature parameters:
 
@@ -562,6 +573,8 @@ db.download_cgi(species="hg38")
 ```bash
 sjcab-peak2anno-db list
 sjcab-peak2anno-db install
+sjcab-peak2anno-db install def
+sjcab-peak2anno-db install default
 sjcab-peak2anno-db install genebed feature blacklists cgi
 sjcab-peak2anno-db install -c genebed -c feature
 sjcab-peak2anno-db install --overwrite

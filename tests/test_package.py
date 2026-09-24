@@ -1777,14 +1777,16 @@ def test_download_gencode_regions_writes_gtf_derived_beds(tmp_path):
     assert outputs["promoter"] == tmp_path / "20bp.promoter.bed"
     assert outputs["list"] == tmp_path / "order.lst"
     assert outputs["list"].read_text(encoding="utf-8") == (
-        "20bp.promoter.up.bed\n"
-        "20bp.promoter.down.bed\n"
-        "20bp.exon.bed\n"
-        "20bp.intron.bed\n"
-        "20bp.tes.bed\n"
-        "20bp.dis5.bed\n"
-        "20bp.dis3.bed\n"
-        "20bp.intergenic.bed\n"
+        "20bp.promoter.up.bed\tPromoter.Up\tPromoter_Upstream\n"
+        "20bp.5utr.bed\t5UTR\tFive_Prime_Untranslated_Regions\n"
+        "20bp.3utr.bed\t3UTR\tThree_Prime_Untranslated_Regions\n"
+        "20bp.promoter.down.bed\tPromoter.Down\tPromoter_Downstream\n"
+        "20bp.exon.bed\tExon\tExons\n"
+        "20bp.intron.bed\tIntron\tIntrons\n"
+        "20bp.tes.bed\tTES\tTranscription_End_Sites\n"
+        "20bp.dis5.bed\tDis5\tDistal_5_Prime\n"
+        "20bp.dis3.bed\tDis3\tDistal_3_Prime\n"
+        "20bp.intergenic.bed\tIntergenic\tIntergenic_Regions\n"
     )
     assert outputs["tes"].read_text(encoding="utf-8") == (
         "chr1\t217\t222\n"
@@ -1823,6 +1825,8 @@ def test_install_gencode_feature_set_uses_feature_prefix_layout(tmp_path):
     version_dir = tmp_path / "feature" / "hg38" / "v31"
     assert feature_dir == version_dir / "2kb"
     assert (feature_dir / "2kb.promoter.up.bed").exists()
+    assert (feature_dir / "2kb.5utr.bed").exists()
+    assert (feature_dir / "2kb.3utr.bed").exists()
     assert (feature_dir / "2kb.exon.bed").exists()
     assert (feature_dir / "2kb.intron.bed").exists()
     assert (feature_dir / "2kb.tes.bed").exists()
@@ -1832,19 +1836,69 @@ def test_install_gencode_feature_set_uses_feature_prefix_layout(tmp_path):
     assert (tmp_path / "bed" / "hg38" / "v31" / "all.gene.bed").exists()
     assert (tmp_path / "bed" / "hg38" / "v31" / "deduplong.gene.bed").exists()
     assert (feature_dir / "order.lst").read_text(encoding="utf-8") == (
-        "2kb.promoter.up.bed\n"
-        "2kb.promoter.down.bed\n"
-        "2kb.exon.bed\n"
-        "2kb.intron.bed\n"
-        "2kb.tes.bed\n"
-        "2kb.dis5.bed\n"
-        "2kb.dis3.bed\n"
-        "2kb.intergenic.bed\n"
+        "2kb.promoter.up.bed\tPromoter.Up\tPromoter_Upstream\n"
+        "2kb.5utr.bed\t5UTR\tFive_Prime_Untranslated_Regions\n"
+        "2kb.3utr.bed\t3UTR\tThree_Prime_Untranslated_Regions\n"
+        "2kb.promoter.down.bed\tPromoter.Down\tPromoter_Downstream\n"
+        "2kb.exon.bed\tExon\tExons\n"
+        "2kb.intron.bed\tIntron\tIntrons\n"
+        "2kb.tes.bed\tTES\tTranscription_End_Sites\n"
+        "2kb.dis5.bed\tDis5\tDistal_5_Prime\n"
+        "2kb.dis3.bed\tDis3\tDistal_3_Prime\n"
+        "2kb.intergenic.bed\tIntergenic\tIntergenic_Regions\n"
+    )
+    assert (feature_dir / "order.utr.lst").read_text(encoding="utf-8") == (
+        "2kb.promoter.up.bed\tPromoter.Up\tPromoter_Upstream\n"
+        "2kb.5utr.bed\t5UTR\tFive_Prime_Untranslated_Regions\n"
+        "2kb.3utr.bed\t3UTR\tThree_Prime_Untranslated_Regions\n"
+        "2kb.promoter.down.bed\tPromoter.Down\tPromoter_Downstream\n"
+        "2kb.exon.bed\tExon\tExons\n"
+        "2kb.intron.bed\tIntron\tIntrons\n"
+        "2kb.tes.bed\tTES\tTranscription_End_Sites\n"
+        "2kb.dis5.bed\tDis5\tDistal_5_Prime\n"
+        "2kb.dis3.bed\tDis3\tDistal_3_Prime\n"
+        "2kb.intergenic.bed\tIntergenic\tIntergenic_Regions\n"
     )
     default_dir = tmp_path / "feature" / "hg38" / "def"
     if default_dir.is_symlink():
         assert os.readlink(str(default_dir)) == "v31/2kb"
     assert (default_dir / "order.lst").exists()
+
+
+def test_feature_generation_classifies_generic_utr_rows(tmp_path):
+    gtf = tmp_path / "utr.gtf"
+    attributes = 'gene_id "G1"; transcript_id "T1";'
+    gtf.write_text(
+        "\n".join(
+            [
+                "##sequence-region chr1 1 500",
+                "chr1\tX\tgene\t1\t300\t.\t+\t.\tgene_id \"G1\";",
+                "chr1\tX\ttranscript\t1\t300\t.\t+\t.\t{}".format(
+                    attributes
+                ),
+                "chr1\tX\texon\t1\t300\t.\t+\t.\t{}".format(attributes),
+                "chr1\tX\tUTR\t1\t99\t.\t+\t.\t{}".format(attributes),
+                "chr1\tX\tCDS\t100\t200\t.\t+\t0\t{}".format(attributes),
+                "chr1\tX\tUTR\t201\t300\t.\t+\t.\t{}".format(attributes),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gene_bed = tmp_path / "gene.bed"
+    gene_bed.write_text("chr1\t0\t300\tG1\t0\t+\n", encoding="utf-8")
+
+    outputs = regions.write_legacy_gencode_feature_unions(
+        gene_bed,
+        gtf,
+        tmp_path / "features",
+        promoter_bp=10,
+        distal_bp=20,
+        tes_bp=10,
+    )
+
+    assert outputs["5utr"].read_text(encoding="utf-8") == "chr1\t0\t99\n"
+    assert outputs["3utr"].read_text(encoding="utf-8") == "chr1\t200\t300\n"
 
 
 def test_install_gencode_feature_set_reuses_preprocessed_output(monkeypatch, tmp_path):
@@ -1856,6 +1910,10 @@ def test_install_gencode_feature_set_reuses_preprocessed_output(monkeypatch, tmp
         for region_type in db.GENCODE_FEATURE_LIST_ORDER
     ]
     (source_dir / "order.lst").write_text(
+        "{}\n".format("\n".join(order_entries)),
+        encoding="utf-8",
+    )
+    (source_dir / "order.utr.lst").write_text(
         "{}\n".format("\n".join(order_entries)),
         encoding="utf-8",
     )
@@ -1901,6 +1959,10 @@ def test_install_gencode_feature_set_skips_existing_target(monkeypatch, tmp_path
         for region_type in db.GENCODE_FEATURE_LIST_ORDER
     ]
     (feature_dir / "order.lst").write_text(
+        "{}\n".format("\n".join(order_entries)),
+        encoding="utf-8",
+    )
+    (feature_dir / "order.utr.lst").write_text(
         "{}\n".format("\n".join(order_entries)),
         encoding="utf-8",
     )

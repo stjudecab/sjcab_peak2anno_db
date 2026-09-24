@@ -49,6 +49,7 @@ from ._segway import (
 from ._liftover import write_liftover_script
 
 _ANNOTATION_CHOICES = ANNOTATION_TYPES + ("deduplong",)
+_INSTALL_DEFAULT_ALIASES = ("def", "default")
 _GENCODE_FEATURE_SPECIES = ("hg38", "hg19", "mm10", "mm9", "mm39")
 _GENCODE_SPECIES_HELP = (
     "Supported GENCODE builds: hg38, hg19."
@@ -105,12 +106,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     install_parser.add_argument(
         "components",
         nargs="*",
-        default=None,
-        choices=INSTALL_COMPONENTS,
+        default=(),
         metavar="COMPONENT",
         help=(
-            "Components to install. Supported: {}. Defaults to all supported "
-            "components.".format(
+            "Components to install: {}. Use def/default for all supported "
+            "components. Defaults to all supported components.".format(
                 ", ".join(INSTALL_COMPONENTS)
             )
         ),
@@ -1248,8 +1248,23 @@ def _confirm_generic_liftover(resource_name: str, genome: str) -> bool:
 
 
 def _install_components_from_args(args: argparse.Namespace) -> Optional[Sequence[str]]:
-    components = list(args.components or ())
+    # Some older generated wrappers passed an empty list as the positional
+    # default. Treat that representation exactly like no positional values.
+    components = [value for value in (args.components or ()) if value != "[]"]
     components.extend(args.component_options or ())
+    if any(value in _INSTALL_DEFAULT_ALIASES for value in components):
+        if len(components) != 1:
+            raise ValueError(
+                "install def/default cannot be combined with component names."
+            )
+        return None
+    unknown = sorted(set(components) - set(INSTALL_COMPONENTS))
+    if unknown:
+        raise ValueError(
+            "Unsupported install component {}. Supported components: {}".format(
+                ", ".join(unknown), ", ".join(INSTALL_COMPONENTS)
+            )
+        )
     return components or None
 
 

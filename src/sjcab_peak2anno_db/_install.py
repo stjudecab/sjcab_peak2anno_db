@@ -577,7 +577,7 @@ def _feature_file_names(label: str) -> Tuple[str, ...]:
     return tuple(
         "{}.{}.bed".format(label, region_type)
         for region_type in GENCODE_FEATURE_LIST_ORDER
-    ) + ("order.lst",)
+    ) + ("order.lst", "order.utr.lst")
 
 
 def _copy_preprocessed_feature_dir(

@@ -35,6 +35,8 @@ Main options:
 
 ```text
 {db-path}/feature/{species}/{version}/{prefix}/{prefix}.promoter.up.bed
+{db-path}/feature/{species}/{version}/{prefix}/{prefix}.5utr.bed
+{db-path}/feature/{species}/{version}/{prefix}/{prefix}.3utr.bed
 {db-path}/feature/{species}/{version}/{prefix}/{prefix}.promoter.down.bed
 {db-path}/feature/{species}/{version}/{prefix}/{prefix}.exon.bed
 {db-path}/feature/{species}/{version}/{prefix}/{prefix}.intron.bed
@@ -43,8 +45,15 @@ Main options:
 {db-path}/feature/{species}/{version}/{prefix}/{prefix}.dis3.bed
 {db-path}/feature/{species}/{version}/{prefix}/{prefix}.intergenic.bed
 {db-path}/feature/{species}/{version}/{prefix}/order.lst
+{db-path}/feature/{species}/{version}/{prefix}/order.utr.lst
 {db-path}/feature/{species}/def -> {version}/{prefix}
 ```
 
-`order.lst` contains `promoter.up`, `promoter.down`, `exon`, `intron`, `tes`,
-`dis5`, `dis3`, and `intergenic` in that order.
+`order.lst` and `order.utr.lst` contain tab-separated rows with the BED
+filename, feature name, and full name. Both use this order: `Promoter.Up`,
+`5UTR`, `3UTR`, `Promoter.Down`, `Exon`, `Intron`, `TES`, `Dis5`, `Dis3`, and
+`Intergenic`. For example, the TES row is:
+
+```text
+{prefix}.tes.bed  TES  Transcription_End_Sites
+```

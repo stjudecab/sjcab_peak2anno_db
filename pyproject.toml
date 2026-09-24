@@ -31,7 +31,10 @@ Repository = "https://github.com/stjudecab/sjcab_peak2anno_db"
 Issues = "https://github.com/stjudecab/sjcab_peak2anno_db/issues"
 
 [project.scripts]
+peak2anno_db = "sjcab_peak2anno_db._cli:main"
+peak2anno-db = "sjcab_peak2anno_db._cli:main"
 sjcab-peak2anno-db = "sjcab_peak2anno_db._cli:main"
+sjcab_peak2anno_db = "sjcab_peak2anno_db._cli:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
