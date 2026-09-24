@@ -3,6 +3,7 @@ import os
 import sjcab_peak2anno_db as db
 import sjcab_peak2anno_db._chromhmm as chromhmm
 import sjcab_peak2anno_db._cli as cli
+import sjcab_peak2anno_db._config as config
 import sjcab_peak2anno_db._dedup as dedup
 import sjcab_peak2anno_db._download as download
 import sjcab_peak2anno_db._gencode as gencode
@@ -70,6 +71,56 @@ def _segway_index_html():
 <a href=label_info.tab>tab-delimited format</a>
 <a href="caas.bed.gz">BED format</a>
 """
+
+
+def test_existing_rc_file_gets_missing_commented_variables(tmp_path):
+    rc_path = tmp_path / ".sjcab_peak2anno.rc"
+    rc_path.write_text(
+        "# custom settings\n"
+        "# SJCAB_PEAK2ANNO_DB_PATH=/data/db\n"
+        "SJCAB_PEAK2ANNO_DB_CLEANCACHE=30\n",
+        encoding="utf-8",
+    )
+
+    config._ensure_rc_variables(rc_path)
+
+    lines = rc_path.read_text(encoding="utf-8").splitlines()
+    assert lines[0:3] == [
+        "# custom settings",
+        "#SJCAB_PEAK2ANNO_DB_PATH=/data/db",
+        "SJCAB_PEAK2ANNO_DB_CLEANCACHE=30",
+    ]
+    assert "#SJCAB_PEAK2ANNO_DB_PATH=~/.sjcab_peak2anno_db" not in lines
+    assert "#SJCAB_PEAK2ANNO_DB_CLEANCACHE=90" not in lines
+    assert all(
+        not line.startswith("# SJCAB_")
+        for line in lines
+        if "SJCAB_PEAK2ANNO_DB_" in line and line.startswith("#")
+    )
+    assert {
+        line.lstrip("# ").split("=", 1)[0]
+        for line in lines
+        if line.lstrip("# ").split("=", 1)[0] in config._RC_VARIABLE_NAMES
+    } == config._RC_VARIABLE_NAMES
+
+
+def test_list_components_uses_aligned_columns_and_feature_folder_names(
+    monkeypatch, tmp_path, capsys
+):
+    monkeypatch.setenv("SJCAB_PEAK2ANNO_DB_PATH", str(tmp_path))
+    feature_dir = tmp_path / "feature" / "custom_species" / "116" / "2000bp"
+    feature_dir.mkdir(parents=True)
+    (feature_dir / "all.bed").write_text("chr1\t1\t2\n", encoding="utf-8")
+
+    cli._print_list("def", None, None)
+    default_output = capsys.readouterr().out
+    assert "source" in default_output.splitlines()[0].split()
+    assert "annotation" not in default_output.splitlines()[0].split()
+
+    cli._print_list("feature", "custom_species", None)
+    feature_output = capsys.readouterr().out
+    assert "custom_species" in feature_output
+    assert "2000bp" in feature_output
 
 
 def _segway_interpreted_html():
@@ -205,7 +256,7 @@ def test_default_version_uses_registry_defined_version_not_largest():
 def test_legacy_deduplong_annotation_resolves_to_isoform_set(tmp_path):
     target = db.installed_path("hg38", "deduplong", data_dir=tmp_path)
 
-    assert target == tmp_path / "bed" / "hg38" / "def" / "deduplong.gene.bed"
+    assert target == tmp_path / "genebed" / "hg38" / "def" / "deduplong.gene.bed"
 
 
 def test_refresh_default_links_to_registry_defined_version(tmp_path):
@@ -233,7 +284,7 @@ def test_refresh_default_links_to_registry_defined_version(tmp_path):
         "hg38", "gene", "default", data_dir=tmp_path, isoform_set="all"
     )
     assert default_path.read_text(encoding="utf-8") == "defined default\n"
-    default_dir = tmp_path / "bed" / "hg38" / "def"
+    default_dir = tmp_path / "genebed" / "hg38" / "def"
     if default_dir.is_symlink():
         assert os.readlink(str(default_dir)) == "v31"
 
@@ -251,8 +302,8 @@ def test_install_gencode_bed_uses_bed_component_layout(tmp_path):
     install._install_gene(entry, tmp_path, overwrite=True)
     install._refresh_default(entry, tmp_path)
 
-    version_path = tmp_path / "bed" / "sacCer3" / entry.version / "all.gene.bed"
-    default_dir = tmp_path / "bed" / "sacCer3" / "def"
+    version_path = tmp_path / "genebed" / "sacCer3" / entry.version / "all.gene.bed"
+    default_dir = tmp_path / "genebed" / "sacCer3" / "def"
     assert version_path.exists()
     if default_dir.is_symlink():
         assert os.readlink(str(default_dir)) == entry.version
@@ -389,14 +440,14 @@ def test_download_gencode_bed_writes_version_layout(tmp_path):
         gtf_path=gtf,
     )
 
-    version_dir = tmp_path / "bed" / "hg38" / "v31"
+    version_dir = tmp_path / "genebed" / "hg38" / "v31"
     assert output == version_dir / "all.gene.bed"
     assert (version_dir / "deduplong.gene.bed").exists()
     assert not (version_dir / "all.tss.bed").exists()
     assert not (version_dir / "all.tes.bed").exists()
     assert not (version_dir / "deduplong.tss.bed").exists()
     assert not (version_dir / "deduplong.tes.bed").exists()
-    default_dir = tmp_path / "bed" / "hg38" / "def"
+    default_dir = tmp_path / "genebed" / "hg38" / "def"
     if default_dir.is_symlink():
         assert os.readlink(str(default_dir)) == "v31"
     assert (default_dir / "all.gene.bed").exists()
@@ -1833,8 +1884,8 @@ def test_install_gencode_feature_set_uses_feature_prefix_layout(tmp_path):
     assert (feature_dir / "2kb.intergenic.bed").exists()
     assert (feature_dir / "2kb.promoter.bed").exists()
     assert not (feature_dir / "gencode.v31.hg38.gene.bed.withtype").exists()
-    assert (tmp_path / "bed" / "hg38" / "v31" / "all.gene.bed").exists()
-    assert (tmp_path / "bed" / "hg38" / "v31" / "deduplong.gene.bed").exists()
+    assert (tmp_path / "genebed" / "hg38" / "v31" / "all.gene.bed").exists()
+    assert (tmp_path / "genebed" / "hg38" / "v31" / "deduplong.gene.bed").exists()
     assert (feature_dir / "order.lst").read_text(encoding="utf-8") == (
         "2kb.promoter.up.bed\tPromoter.Up\tPromoter_Upstream\n"
         "2kb.5utr.bed\t5UTR\tFive_Prime_Untranslated_Regions\n"

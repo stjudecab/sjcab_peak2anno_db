@@ -31,9 +31,9 @@ custom species name; the mapping is recorded in `custom.name.tsv`.
 ## Layout
 
 ```text
-{db-path}/bed/{species}/{version}/all.gene.bed
-{db-path}/bed/{species}/{version}/deduplong.gene.bed
-{db-path}/bed/{species}/def -> {version}
+{db-path}/genebed/{species}/{version}/all.gene.bed
+{db-path}/genebed/{species}/{version}/deduplong.gene.bed
+{db-path}/genebed/{species}/def -> {version}
 {db-path}/sizes/{species}.sizes
 {db-path}/sizes/{species}.sizes.clean
 ```

@@ -966,7 +966,7 @@ def gencode_bed_filename(species: str, version: str) -> str:
 def gencode_bed_dir(output_dir: PathLike, species: str, version: str) -> Path:
     """Return the version directory for downloaded GENCODE BED resources."""
 
-    return Path(output_dir).expanduser() / "bed" / species / version
+    return Path(output_dir).expanduser() / "genebed" / species / version
 
 
 def resolve_gencode_gtf_url(
@@ -1248,8 +1248,8 @@ def download_and_convert_gencode_gtf(
     """Download or reuse a GENCODE GTF and convert it to BED.
 
     When ``output_bed`` is not provided, the generated BEDs are organized as
-    ``{output_dir}/bed/{species}/{version}/{isoform_set}.{annotation}.bed``
-    and ``{output_dir}/bed/{species}/def`` points at the requested version
+    ``{output_dir}/genebed/{species}/{version}/{isoform_set}.{annotation}.bed``
+    and ``{output_dir}/genebed/{species}/def`` points at the requested version
     directory. Passing ``output_bed`` keeps the explicit single-file behavior.
     """
 
@@ -1484,7 +1484,7 @@ def _refresh_default_version_dir(
     version: str,
     version_dir: Path,
 ) -> None:
-    default_dir = target_dir / "bed" / species / "def"
+    default_dir = target_dir / "genebed" / species / "def"
     if default_dir.is_symlink():
         default_dir.unlink()
     elif default_dir.exists():

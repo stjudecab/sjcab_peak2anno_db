@@ -22,7 +22,9 @@ conda install stjudecab::sjcab_peak2anno_db
 sjcab-peak2anno-db install
 sjcab-peak2anno-db install def
 sjcab-peak2anno-db install default
-sjcab-peak2anno-db list
+sjcab-peak2anno-db list def
+sjcab-peak2anno-db list genebed
+sjcab-peak2anno-db list feature
 ```
 
 The default database directory is `~/.sjcab_peak2anno_db`. Use `--db-path` or

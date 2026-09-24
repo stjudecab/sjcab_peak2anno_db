@@ -613,7 +613,7 @@ def _optional_feature_file_names(label: str) -> Tuple[str, ...]:
 
 
 def _installed_gene_bed_path(target_root: Path, species: str, version: str) -> Path:
-    return target_root / "bed" / species / version / "all.gene.bed"
+    return target_root / "genebed" / species / version / "all.gene.bed"
 
 
 def _existing_installed_gene_bed(
@@ -635,7 +635,7 @@ def _install_gene(
 ) -> Path:
     destination = (
         user_data_dir(target_root)
-        / "bed"
+        / "genebed"
         / (storage_species or entry.species)
         / entry.version
         / "all.gene.bed"
@@ -658,7 +658,7 @@ def _install_deduplong_gene(
     storage_species = storage_species or gene_entry.species
     destination = (
         user_data_dir(target_root)
-        / "bed"
+        / "genebed"
         / storage_species
         / gene_entry.version
         / "deduplong.gene.bed"
@@ -668,7 +668,7 @@ def _install_deduplong_gene(
 
     gene_path = (
         user_data_dir(target_root)
-        / "bed"
+        / "genebed"
         / storage_species
         / gene_entry.version
         / "all.gene.bed"
@@ -681,8 +681,8 @@ def _refresh_default(
     entry: AnnotationResource, target_root: Path, storage_species: Optional[str] = None
 ) -> None:
     storage_species = storage_species or entry.species
-    version_dir = user_data_dir(target_root) / "bed" / storage_species / entry.version
-    default_dir = user_data_dir(target_root) / "bed" / storage_species / "def"
+    version_dir = user_data_dir(target_root) / "genebed" / storage_species / entry.version
+    default_dir = user_data_dir(target_root) / "genebed" / storage_species / "def"
     _refresh_dir_link(default_dir, entry.version, version_dir, overwrite=True)
 
 

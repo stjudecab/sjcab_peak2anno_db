@@ -53,7 +53,7 @@ db.filter_bed(
     "perover",
     "active_chromhmm.bed",
     output_dir="annotations",
-    gene_bed="annotations/bed/hg38/v31/all.gene.bed",
+    gene_bed="annotations/genebed/hg38/v31/all.gene.bed",
 )
 ```
 

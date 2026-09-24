@@ -64,7 +64,9 @@ The default overwrite behavior is off; use `--overwrite` to regenerate files.
 
 ## Other commands
 
-- `list`: lists bundled resources; no installation by default.
+- `list def`: lists the default bundled GeneBED resources. Use `list genebed`,
+  `list feature`, `list blacklists`, or `list cgi` to select another group;
+  output is aligned like `column -t` and uses a `source` column.
 - `path`: prints a resource path; `--install`/`-I` installs missing resources.
 - `install-genebed`/`download-genebed`: generate GeneBEDs from GTF input.
 - `install-blacklists`, `install-cgi`, `install-chromhmm`, and

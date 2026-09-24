@@ -76,3 +76,9 @@
   FeatureBED, TSS/TES, deduplicated, CGI, and blacklist outputs.
 - Added tests covering sorted interval generation and normalized packaged BED
   resources.
+- Completed existing RC files with missing commented settings and normalized
+  commented variables to the `#SJCAB_...` form.
+- Added component-aware aligned `list` output for GeneBEDs, FeatureBEDs,
+  blacklists, and CGI resources, including a `source` column.
+- Renamed the installed GeneBED directory from `bed` to `genebed` throughout
+  the package, tests, and documentation.

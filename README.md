@@ -18,7 +18,11 @@ sjcab-peak2anno-db install # install default for "GeneBEDs FeatureBEDs blacklist
 sjcab-peak2anno-db install def # same default installation
 sjcab-peak2anno-db install default # same default installation
 sjcab-peak2anno-db install genebed feature # install selected default group
-sjcab-peak2anno-db list # list default bundle
+sjcab-peak2anno-db list def # list default GeneBED bundle
+sjcab-peak2anno-db list genebed # list all GeneBED resources
+sjcab-peak2anno-db list feature # list installed FeatureBED folders
+sjcab-peak2anno-db list blacklists # list bundled blacklist resources
+sjcab-peak2anno-db list cgi # list bundled CGI resources
 
 sjcab-peak2anno-db download-genebed hg38 v31 -o annotations # download Gencode hg38 v31 GeneBEDs to annotation folder
 sjcab-peak2anno-db install-genebed hg19 v31lift37 # install Gencode hg19 v31lift37 to --db-path
@@ -90,7 +94,9 @@ Common option styles:
 ## User configuration
 
 If no RC file exists, the default XDG RC template is created automatically;
-all settings in the generated template are commented out.
+all settings in the generated template are commented out. Existing RC files
+are completed with any missing commented settings; commented configuration
+variables use `#SJCAB_...` with no space after `#`.
 RC files are read from `~/.sjcab_peak2anno.rc` and
 `$XDG_CONFIG_HOME/sjcab_peak2anno/.sjcab_peak2anno.rc` (the XDG file takes
 precedence). Set `SJCAB_PEAK2ANNO_CONFIG` to add a specific RC file; that file
@@ -194,9 +200,9 @@ reuse an existing non-empty chain file.
 Default layout:
 
 ```text
-{db-path}/bed/{species}/{version}/all.gene.bed
-{db-path}/bed/{species}/{version}/deduplong.gene.bed
-{db-path}/bed/{species}/def -> {version}
+{db-path}/genebed/{species}/{version}/all.gene.bed
+{db-path}/genebed/{species}/{version}/deduplong.gene.bed
+{db-path}/genebed/{species}/def -> {version}
 {db-path}/sizes/{species}.sizes
 {db-path}/sizes/{species}.sizes.clean
 ```
@@ -239,7 +245,7 @@ sjcab-peak2anno-db dedup-bed hg38 v31 -m peak -i h3k4me3_peaks.bed -o annotation
 # Select transcript IDs explicitly.
 sjcab-peak2anno-db dedup-bed mm10 vM22 -m isoID -i isoforms.txt -K ensid -o annotations
 # Keep genes whose promoters overlap the selector file.
-sjcab-peak2anno-db filter-bed -b annotations/bed/hg38/v31/all.gene.bed -m perover -i active_chromhmm.bed -o annotations
+sjcab-peak2anno-db filter-bed -b annotations/genebed/hg38/v31/all.gene.bed -m perover -i active_chromhmm.bed -o annotations
 # Select by expression and require exact selector matches.
 sjcab-peak2anno-db filter-bed hg38 v31 -m isoexp -i isoform_expression.tsv --exclusive -o annotations
 ```
@@ -387,7 +393,7 @@ import sjcab_peak2anno_db as db
 db.download_feature("hg38", "v31", "feature_downloads")
 
 db.write_tss_flank_region_unions(
-    "annotations/bed/hg38/v31/all.gene.bed",
+    "annotations/genebed/hg38/v31/all.gene.bed",
     "feature_downloads",
     promoter_bp="2kb",
     distal_bp="50kb",
@@ -573,7 +579,9 @@ db.download_cgi(species="hg38")
 ## Command Examples
 
 ```bash
-sjcab-peak2anno-db list
+sjcab-peak2anno-db list def
+sjcab-peak2anno-db list genebed
+sjcab-peak2anno-db list feature
 sjcab-peak2anno-db install
 sjcab-peak2anno-db install def
 sjcab-peak2anno-db install default
@@ -586,7 +594,7 @@ sjcab-peak2anno-db download-genebed hg38 v31 -o annotations
 sjcab-peak2anno-db download-genebed mm10 vM22 -g gencode.vM22.annotation.gtf.gz -o annotations
 sjcab-peak2anno-db dedup-bed hg38 v31 -m peak -i h3k4me3_peaks.bed -o annotations
 sjcab-peak2anno-db dedup-bed mm10 vM22 -m isoID -i isoforms.txt -K ensid -o annotations
-sjcab-peak2anno-db filter-bed -b annotations/bed/hg38/v31/all.gene.bed -m perover -i active_chromhmm.bed -o annotations
+sjcab-peak2anno-db filter-bed -b annotations/genebed/hg38/v31/all.gene.bed -m perover -i active_chromhmm.bed -o annotations
 sjcab-peak2anno-db filter-bed hg38 v31 -m isoexp -i isoform_expression.tsv --exclusive -o annotations
 
 sjcab-peak2anno-db install-feature all all

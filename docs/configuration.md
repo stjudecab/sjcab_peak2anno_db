@@ -39,8 +39,10 @@ The generated configuration template is searched in this order:
 2. `$XDG_CONFIG_HOME/sjcab_peak2anno/.sjcab_peak2anno.rc`;
 3. `~/.sjcab_peak2anno.rc`.
 
-If the XDG file does not exist, a fully commented template is created. RC keys
-use the same names as environment variables. The environment prefix is
+If the XDG file does not exist, a fully commented template is created. Existing
+RC files are completed with any missing commented settings. Commented
+configuration variables use `#SJCAB_...` with no space after `#`. RC keys use
+the same names as environment variables. The environment prefix is
 `SJCAB_PEAK2ANNO_DB_`.
 
 ### Environment variable defaults are below can be override

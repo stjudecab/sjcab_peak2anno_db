@@ -21,6 +21,21 @@ DEFAULT_CLEAN_CACHE_DAYS = 90
 DEFAULT_PEAK_TXT_DELIMITER = ":-*/^;_%$,"
 DEFAULT_BED_SCORE_COLUMN = 5
 DEFAULT_TXT_SCORE_COLUMN = 2
+_RC_DEFAULT_LINES = (
+    "#SJCAB_PEAK2ANNO_DB_PATH=~/.sjcab_peak2anno_db",
+    "#SJCAB_PEAK2ANNO_DB_INSTALL_OPTIONS=genebed,feature,blacklists,cgi",
+    "#SJCAB_PEAK2ANNO_DB_INSTALL_SPECIES=hg38,hg19,mm10,mm39",
+    "#SJCAB_PEAK2ANNO_DB_INSTALL_VERSIONS=v31,v31lift37,vM22,vM39",
+    "#SJCAB_PEAK2ANNO_DB_VERSION_STALE_DAYS=90",
+    "#SJCAB_PEAK2ANNO_DB_SIZESCLEAN=1",
+    "#SJCAB_PEAK2ANNO_DB_CLEANCACHE=90",
+    "#SJCAB_PEAK2ANNO_DB_PEAK_TXT_DELIMITER=:-*/^;_%$,",
+    "#SJCAB_PEAK2ANNO_DB_BED_SCORE_COLUMN=5",
+    "#SJCAB_PEAK2ANNO_DB_TXT_SCORE_COLUMN=2",
+)
+_RC_VARIABLE_NAMES = frozenset(
+    line[1:].split("=", 1)[0].upper() for line in _RC_DEFAULT_LINES
+)
 
 
 @dataclass(frozen=True)
@@ -191,6 +206,9 @@ def _config_paths() -> Tuple[Path, ...]:
         _create_default_xdg_config(xdg)
         if xdg.is_file():
             paths.append(xdg)
+    else:
+        for path in paths:
+            _ensure_rc_variables(path)
     # An explicitly selected file is the highest-precedence RC file.
     return tuple(paths)
 
@@ -203,16 +221,9 @@ def _create_default_xdg_config(path: Path) -> None:
         path.write_text(
             """# sjcab_peak2anno_db configuration.
 # Uncomment or edit values as needed.
-# SJCAB_PEAK2ANNO_DB_INSTALL_OPTIONS=genebed,feature,blacklists,cgi
-# SJCAB_PEAK2ANNO_DB_INSTALL_SPECIES=hg38,hg19,mm10,mm39
-# SJCAB_PEAK2ANNO_DB_INSTALL_VERSIONS=v31,v31lift37,vM22,vM39
-# SJCAB_PEAK2ANNO_DB_VERSION_STALE_DAYS=90
-# SJCAB_PEAK2ANNO_DB_SIZESCLEAN=1
-# SJCAB_PEAK2ANNO_DB_CLEANCACHE=90
-# SJCAB_PEAK2ANNO_DB_PEAK_TXT_DELIMITER=:-*/^;_%$,
-# SJCAB_PEAK2ANNO_DB_BED_SCORE_COLUMN=5
-# SJCAB_PEAK2ANNO_DB_TXT_SCORE_COLUMN=2
-""",
+"""
+            + "\n".join(_RC_DEFAULT_LINES)
+            + "\n",
             encoding="utf-8",
         )
     except OSError:
@@ -241,6 +252,51 @@ def _migrate_legacy_default_xdg_config(path: Path) -> None:
         active = {line.strip() for line in lines if line.strip() and not line.lstrip().startswith("#")}
         if lines and lines[0].strip() == "# sjcab_peak2anno_db configuration." and active <= defaults:
             _create_default_xdg_config(path)
+    except OSError:
+        return
+
+
+def _ensure_rc_variables(path: Path) -> None:
+    """Append missing commented configuration variables to an RC file."""
+
+    try:
+        text = path.read_text(encoding="utf-8")
+        present = set()
+        normalized_lines = []
+        changed = False
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if line.startswith("#"):
+                comment = line[1:].lstrip()
+                comment_key = comment.split("=", 1)[0].strip().upper()
+                if comment_key in _RC_VARIABLE_NAMES:
+                    normalized_line = "#" + comment
+                    if normalized_line != raw_line:
+                        changed = True
+                    raw_line = normalized_line
+                    line = comment
+                else:
+                    line = comment
+            if "=" not in line:
+                normalized_lines.append(raw_line)
+                continue
+            key = line.split("=", 1)[0].strip().upper()
+            if key in _RC_VARIABLE_NAMES:
+                present.add(key)
+            normalized_lines.append(raw_line)
+        missing = [
+            line for line in _RC_DEFAULT_LINES
+            if line[1:].split("=", 1)[0].upper() not in present
+        ]
+        updated = "\n".join(normalized_lines)
+        if text.endswith("\n"):
+            updated += "\n"
+        if missing:
+            suffix = "" if not updated or updated.endswith("\n") else "\n"
+            updated += suffix + "\n".join(missing) + "\n"
+        if not changed and updated == text:
+            return
+        path.write_text(updated, encoding="utf-8")
     except OSError:
         return
 

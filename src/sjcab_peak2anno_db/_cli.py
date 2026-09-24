@@ -12,7 +12,13 @@ from typing import Optional, Sequence
 from ._chromhmm import CHROMHMM_GENOMES, chromhmm_root, download_chromhmm
 from ._config import parse_species_version_values
 from ._dedup import dedup_gencode_bed, filter_gencode_bed
-from ._external import CGI_SPECIES, download_cgi, install_blacklists, install_cgi
+from ._external import (
+    CGI_SPECIES,
+    download_cgi,
+    install_blacklists,
+    install_cgi,
+    iter_blacklists,
+)
 from ._gencode import (
     download_and_convert_gencode_gtf,
     download_gencode_gtf_batch,
@@ -37,8 +43,10 @@ from ._registry import (
     ISOFORM_SETS,
     SUPPORTED_SPECIES,
     UnknownResourceError,
+    data_root,
     iter_resources,
     path,
+    user_data_dir,
 )
 from ._segway import (
     download_segway,
@@ -75,29 +83,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     list_parser = subparsers.add_parser("list", help="List indexed resources.")
-    list_parser.add_argument("-s", "--species", choices=SUPPORTED_SPECIES)
-    list_parser.add_argument("-a", "--annotation", choices=ANNOTATION_TYPES)
+    list_parser.add_argument(
+        "component",
+        nargs="?",
+        choices=("def", "default", "genebed", "feature", "blacklists", "cgi"),
+        default="def",
+        help="Resource group to list; default is def (the bundled GeneBED set).",
+    )
+    list_parser.add_argument("-s", "--species", help="Filter by species or folder name.")
     list_parser.add_argument("-i", "--isoform-set", choices=ISOFORM_SETS)
-
-    path_parser = subparsers.add_parser("path", help="Print an annotation path.")
-    path_parser.add_argument("species", choices=SUPPORTED_SPECIES)
-    path_parser.add_argument("annotation", choices=_ANNOTATION_CHOICES)
-    path_parser.add_argument("version", nargs="?", default="default")
-    path_parser.add_argument("-v", "--ver", dest="version_option")
-    path_parser.add_argument("-d", "--db-path", dest="data_dir", help="Generated annotation directory.")
-    path_parser.add_argument(
-        "-i",
-        "--isoform-set",
-        choices=ISOFORM_SETS,
-        default="all",
-        help="Use all isoforms or one longest isoform per gene.",
-    )
-    path_parser.add_argument(
-        "-I",
-        "--install",
-        action="store_true",
-        help="Generate all annotations before printing the path.",
-    )
 
     install_parser = subparsers.add_parser(
         "install",
@@ -159,58 +153,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="Rewrite existing generated files.",
     )
 
-    update_parser = subparsers.add_parser(
-        "update", help="Regenerate all annotations into the configured user data directory."
-    )
-    update_parser.add_argument("species", nargs="?", help="Species/build to update.")
-    update_parser.add_argument("-d", "--db-path", dest="data_dir", help="Generated annotation directory.")
-
-    blacklist_parser = subparsers.add_parser(
-        "install-blacklists",
-        help="Install blacklist BEDs into the configured user data directory.",
-    )
-    blacklist_parser.add_argument("species_positional", nargs="?", metavar="SPECIES")
-    blacklist_parser.add_argument("-d", "--db-path", dest="data_dir", help="Generated annotation directory.")
-    blacklist_parser.add_argument(
-        "-s", "--species", nargs="+",
-        help=_RESOURCE_SPECIES_HELP,
-    )
-    blacklist_parser.add_argument(
-        "--yes-liftover", action="store_true",
-        help="Accept generating a UCSC liftOver script from hg38 for unsupported builds.",
-    )
-    blacklist_parser.add_argument(
-        "-n",
-        "--no-overwrite",
-        action="store_true",
-        help="Do not rewrite existing blacklist files.",
-    )
-
-    install_cgi_parser = subparsers.add_parser(
-        "install-cgi",
-        help="Install packaged CGI BED files into the configured user data directory.",
-    )
-    install_cgi_parser.add_argument("species_positional", nargs="?", metavar="SPECIES")
-    install_cgi_parser.add_argument("-d", "--db-path", dest="data_dir", help="Generated annotation directory.")
-    install_cgi_parser.add_argument(
-        "-s", "--species", nargs="+",
-        help=_RESOURCE_SPECIES_HELP,
-    )
-    install_cgi_parser.add_argument(
-        "--yes-liftover", action="store_true",
-        help="Accept generating a UCSC liftOver script from hg38 for unsupported builds.",
-    )
-    install_cgi_parser.add_argument(
-        "-n",
-        "--no-overwrite",
-        action="store_true",
-        help="Do not rewrite existing CGI files.",
-    )
-
     feature_install_parser = subparsers.add_parser(
         "install-feature",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        help="Install bundled GENCODE BEDs and downloaded feature annotations.",
+        help="Install bundled GeneBEDs and FeatureBEDs",
         epilog=_GENCODE_HELP_EPILOG,
     )
     feature_install_parser.add_argument(
@@ -257,9 +203,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         include_name=True,
     )
 
+    _add_gencode_feature_parser(
+        subparsers,
+        "download-feature",
+        "Download/convert gtf to GeneBeds and merged FeatureBEDs.",
+    )
+
     bed_install_parser = subparsers.add_parser(
         "install-genebed",
-        help="Install bundled GENCODE BEDs and derived TSS/TES files.",
+        help="Install bundled GeneBEDs",
     )
     bed_install_parser.add_argument("species", nargs="?", help="Species/build to install.")
     bed_install_parser.add_argument("-d", "--db-path", dest="data_dir", help="Generated annotation directory.")
@@ -284,35 +236,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="Rewrite existing generated files.",
     )
 
-    cgi_parser = subparsers.add_parser(
-        "download-cgi",
-        help="Download UCSC cpgIslandExt tables and write CGI BED files.",
-    )
-    cgi_parser.add_argument("species_positional", nargs="?", metavar="SPECIES")
-    cgi_parser.add_argument("-d", "--db-path", dest="data_dir", help="Generated annotation directory.")
-    cgi_parser.add_argument(
-        "-s",
-        "--species",
-        dest="species_option",
-        choices=CGI_SPECIES,
-        nargs="+",
-        help=_RESOURCE_SPECIES_HELP,
-    )
-    cgi_parser.add_argument(
-        "--yes-liftover", action="store_true",
-        help="For another build, download hg38 and write a UCSC liftOver script.",
-    )
-    cgi_parser.add_argument(
-        "-n",
-        "--no-overwrite",
-        action="store_true",
-        help="Do not rewrite existing CGI files.",
-    )
-
     gencode_parser = subparsers.add_parser(
         "download-genebed",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        help="Download or reuse a GENCODE GTF and write organized BED files.",
+        help="Download or reuse a GTF and write organized GeneBEDs files.",
         epilog=_GENCODE_HELP_EPILOG,
     )
     gencode_parser.add_argument(
@@ -371,12 +298,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="Number of worker processes; each worker handles one GTF.",
     )
 
-    _add_gencode_feature_parser(
-        subparsers,
-        "download-feature",
-        "Download/convert GENCODE and write merged FeatureBED classes.",
-    )
-
     _add_dedup_filter_parser(
         subparsers,
         "dedup-bed",
@@ -388,32 +309,125 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "Select one isoform per gene and omit genes without selector support.",
     )
 
-    _add_chromhmm_parser(
-        subparsers,
-        "download-chromhmm",
-        "Download Roadmap ChromHMM dense BED files.",
+    blacklist_parser = subparsers.add_parser(
+        "install-blacklists",
+        help="Install blacklist BEDs into the configured user data directory.",
     )
+    blacklist_parser.add_argument("species_positional", nargs="?", metavar="SPECIES")
+    blacklist_parser.add_argument("-d", "--db-path", dest="data_dir", help="Generated annotation directory.")
+    blacklist_parser.add_argument(
+        "-s", "--species", nargs="+",
+        help=_RESOURCE_SPECIES_HELP,
+    )
+    blacklist_parser.add_argument(
+        "--yes-liftover", action="store_true",
+        help="Accept generating a UCSC liftOver script from hg38 for unsupported builds.",
+    )
+    blacklist_parser.add_argument(
+        "-n",
+        "--no-overwrite",
+        action="store_true",
+        help="Do not rewrite existing blacklist files.",
+    )
+
+    install_cgi_parser = subparsers.add_parser(
+        "install-cgi",
+        help="Install packaged CGI BED files into the configured user data directory.",
+    )
+    install_cgi_parser.add_argument("species_positional", nargs="?", metavar="SPECIES")
+    install_cgi_parser.add_argument("-d", "--db-path", dest="data_dir", help="Generated annotation directory.")
+    install_cgi_parser.add_argument(
+        "-s", "--species", nargs="+",
+        help=_RESOURCE_SPECIES_HELP,
+    )
+    install_cgi_parser.add_argument(
+        "--yes-liftover", action="store_true",
+        help="Accept generating a UCSC liftOver script from hg38 for unsupported builds.",
+    )
+    install_cgi_parser.add_argument(
+        "-n",
+        "--no-overwrite",
+        action="store_true",
+        help="Do not rewrite existing CGI files.",
+    )
+
+    cgi_parser = subparsers.add_parser(
+        "download-cgi",
+        help="Download UCSC cpgIslandExt tables and write CGI BED files.",
+    )
+    cgi_parser.add_argument("species_positional", nargs="?", metavar="SPECIES")
+    cgi_parser.add_argument("-d", "--db-path", dest="data_dir", help="Generated annotation directory.")
+    cgi_parser.add_argument(
+        "-s",
+        "--species",
+        dest="species_option",
+        choices=CGI_SPECIES,
+        nargs="+",
+        help=_RESOURCE_SPECIES_HELP,
+    )
+    cgi_parser.add_argument(
+        "--yes-liftover", action="store_true",
+        help="For another build, download hg38 and write a UCSC liftOver script.",
+    )
+    cgi_parser.add_argument(
+        "-n",
+        "--no-overwrite",
+        action="store_true",
+        help="Do not rewrite existing CGI files.",
+    )
+
     _add_chromhmm_parser(
         subparsers,
         "install-chromhmm",
         "Download Roadmap ChromHMM dense BED files into the user data directory.",
     )
-    _add_segway_parser(
+    _add_chromhmm_parser(
         subparsers,
-        "download-segway",
-        "Download Segway encyclopedia hg19 BED files.",
+        "download-chromhmm",
+        "Download Roadmap ChromHMM dense BED files.",
     )
     _add_segway_parser(
         subparsers,
         "install-segway",
         "Download Segway encyclopedia hg19 BED files into the user data directory.",
     )
+    _add_segway_parser(
+        subparsers,
+        "download-segway",
+        "Download Segway encyclopedia hg19 BED files.",
+    )
+
+    path_parser = subparsers.add_parser("path", help="Print an annotation path.")
+    path_parser.add_argument("species", choices=SUPPORTED_SPECIES)
+    path_parser.add_argument("annotation", choices=_ANNOTATION_CHOICES)
+    path_parser.add_argument("version", nargs="?", default="default")
+    path_parser.add_argument("-v", "--ver", dest="version_option")
+    path_parser.add_argument("-d", "--db-path", dest="data_dir", help="Generated annotation directory.")
+    path_parser.add_argument(
+        "-i",
+        "--isoform-set",
+        choices=ISOFORM_SETS,
+        default="all",
+        help="Use all isoforms or one longest isoform per gene.",
+    )
+    path_parser.add_argument(
+        "-I",
+        "--install",
+        action="store_true",
+        help="Generate all annotations before printing the path.",
+    )
+
+    update_parser = subparsers.add_parser(
+        "update", help="Regenerate all annotations into the configured user data directory."
+    )
+    update_parser.add_argument("species", nargs="?", help="Species/build to update.")
+    update_parser.add_argument("-d", "--db-path", dest="data_dir", help="Generated annotation directory.")
 
     args = parser.parse_args(argv)
 
     try:
         if args.command == "list":
-            _print_list(args.species, args.annotation, args.isoform_set)
+            _print_list(args.component, args.species, args.isoform_set)
             return 0
         if args.command == "path":
             if args.install:
@@ -1399,30 +1413,131 @@ def _log_time_prefix() -> str:
 
 
 def _print_list(
+    component: str,
     species: Optional[str],
-    annotation: Optional[str],
     isoform_set: Optional[str],
 ) -> None:
-    print("species\tisoform_set\tannotation\tversion\tdefault\tinstalled_path\tsource_gene")
-    for entry in iter_resources():
-        if species is not None and entry.species != species:
-            continue
-        if annotation is not None and entry.annotation != annotation:
-            continue
-        if isoform_set is not None and entry.isoform_set != isoform_set:
-            continue
-        default = "yes" if entry.is_default else "no"
-        print(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}".format(
-                entry.species,
-                entry.isoform_set,
-                entry.annotation,
-                entry.version,
-                default,
-                entry.installed_relative_path,
-                entry.source_relative_path,
+    component = "def" if component == "default" else component
+    headers = ("species", "isoform_set", "version", "default", "installed_path", "source")
+    rows = []
+    if component in {"def", "genebed"}:
+        for entry in iter_resources():
+            if component == "def" and not entry.is_default:
+                continue
+            if species is not None and entry.species.lower() != species.lower():
+                continue
+            if isoform_set is not None and entry.isoform_set != isoform_set:
+                continue
+            source_path = data_root() / entry.source_relative_path
+            source = source_path.name if source_path.is_file() else Path(
+                entry.source_relative_path
+            ).name
+            rows.append(
+                (
+                    entry.species,
+                    entry.isoform_set,
+                    entry.version,
+                    "yes" if entry.is_default else "no",
+                    entry.installed_relative_path,
+                    source,
+                )
             )
+    elif component == "feature":
+        root = user_data_dir() / "feature"
+        if root.is_dir():
+            for species_dir in sorted(root.iterdir(), key=lambda path: path.name.lower()):
+                if not species_dir.is_dir():
+                    continue
+                if species is not None and species_dir.name.lower() != species.lower():
+                    continue
+                for version_dir in sorted(
+                    species_dir.iterdir(), key=lambda path: path.name.lower()
+                ):
+                    if not version_dir.is_dir():
+                        continue
+                    if version_dir.name == "def":
+                        rows.append(
+                            _list_row(
+                                species_dir.name,
+                                "-",
+                                "def",
+                                version_dir,
+                                version_dir.name,
+                                root,
+                            )
+                        )
+                        continue
+                    for feature_dir in sorted(
+                        version_dir.iterdir(), key=lambda path: path.name.lower()
+                    ):
+                        if feature_dir.is_dir():
+                            rows.append(
+                                _list_row(
+                                    species_dir.name,
+                                    "-",
+                                    version_dir.name,
+                                    feature_dir,
+                                    feature_dir.name,
+                                    root,
+                                )
+                            )
+    elif component in {"blacklists", "cgi"}:
+        source_dir = data_root() / component
+        names = (
+            iter_blacklists()
+            if component == "blacklists"
+            else tuple(path.name for path in sorted(source_dir.glob("*_cgi.bed")))
         )
+        for name in names:
+            resource_species = name.split("-", 1)[0] if component == "blacklists" else name[:-8]
+            if species is not None and resource_species.lower() != species.lower():
+                continue
+            rows.append(
+                (
+                    resource_species,
+                    "-",
+                    "-",
+                    "yes",
+                    "{}/{}".format(component, name),
+                    name,
+                )
+            )
+    _print_table(headers, rows)
+
+
+def _list_row(
+    species: str,
+    isoform_set: str,
+    version: str,
+    path: Path,
+    source: str,
+    root: Path,
+) -> tuple:
+    return (
+        species,
+        isoform_set,
+        version,
+        "yes" if version == "def" else "no",
+        str(path.relative_to(root)),
+        source,
+    )
+
+
+def _print_table(headers, rows) -> None:
+    """Print rows with the spacing produced by ``column -t``."""
+
+    widths = [len(header) for header in headers]
+    for row in rows:
+        for index, value in enumerate(row):
+            widths[index] = max(widths[index], len(str(value)))
+    print("  ".join(_format_table_value(header, index, widths) for index, header in enumerate(headers)))
+    for row in rows:
+        print("  ".join(_format_table_value(value, index, widths) for index, value in enumerate(row)))
+
+
+def _format_table_value(value, index, widths) -> str:
+    text = str(value)
+    return text if index == len(widths) - 1 else text.ljust(widths[index])
 
 
 if __name__ == "__main__":

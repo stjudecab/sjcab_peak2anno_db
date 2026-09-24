@@ -86,7 +86,7 @@ class AnnotationResource:
     def installed_relative_path(self) -> str:
         """Return the cache path relative to the selected user data directory."""
 
-        return "bed/{}/{}/{}.{}.bed".format(
+        return "genebed/{}/{}/{}.{}.bed".format(
             self.species, self.version, self.isoform_set, self.annotation
         )
 
@@ -235,7 +235,7 @@ def installed_path(
         selected_version = "def"
     return (
         user_data_dir(data_dir)
-        / "bed"
+        / "genebed"
         / entry.species
         / selected_version
         / "{}.{}.bed".format(entry.isoform_set, entry.annotation)
