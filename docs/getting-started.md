@@ -44,6 +44,9 @@ single-process. The worker count is capped at the CPUs allocated to the job:
 sjcab-peak2anno-db download-feature cat,dog,horse -j 3
 ```
 
+`dedup-bed` and `filter-bed` support `-n/--workers` (default `2`) to write
+their independent TSS and TES outputs in parallel.
+
 ## Python API
 
 ```python

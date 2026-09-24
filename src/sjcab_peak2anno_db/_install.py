@@ -13,7 +13,7 @@ from typing import Iterable, Optional, Tuple, Union
 
 from ._download import ProgressCallback, report_progress
 from ._config import effective_processes, load_config, parse_species_version_values
-from ._derive import write_deduplong
+from ._derive import _sort_bed_file, write_deduplong
 from ._gencode import data_species_name, download_gencode_gtf_batch
 from ._external import (
     BLACKLIST_VERSION,
@@ -645,6 +645,7 @@ def _install_gene(
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(resource(entry.species, "gene", entry.version), destination)
+    _sort_bed_file(destination)
     return destination
 
 

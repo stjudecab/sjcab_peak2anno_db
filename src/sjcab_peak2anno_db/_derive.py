@@ -53,7 +53,43 @@ def write_deduplong(
         for _length_value, line in selected.values():
             handle.write(line)
 
+    _sort_bed_file(output)
     return output
+
+
+def _sort_bed_file(path: PathLike) -> Path:
+    """Sort a BED file by chromosome, start, and end in place."""
+
+    bed_path = Path(path).expanduser()
+    headers = []
+    rows = []
+    other = []
+    with bed_path.open("r", encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if not line.strip() or line.startswith("#"):
+                headers.append((line_number, line))
+                continue
+            fields = line.rstrip("\n").split("\t")
+            try:
+                key = (fields[0], int(fields[1]), int(fields[2]))
+            except (IndexError, ValueError):
+                other.append((line_number, line))
+                continue
+            rows.append((key, line))
+
+    rows.sort(key=lambda item: (item[0], item[1]))
+    tmp_path = bed_path.with_name(bed_path.name + ".sort.tmp")
+    try:
+        with tmp_path.open("w", encoding="utf-8") as handle:
+            for _line_number, line in sorted(headers + other):
+                handle.write(line)
+            for _key, line in rows:
+                handle.write(line)
+        tmp_path.replace(bed_path)
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
+    return bed_path
 
 
 def write_derived(
@@ -89,6 +125,7 @@ def _write_site(gene_bed: PathLike, output_bed: PathLike, site: str) -> Path:
             fields[1], fields[2] = _site_interval(fields, site)
             target.write("\t".join(fields) + "\n")
 
+    _sort_bed_file(output)
     return output
 
 

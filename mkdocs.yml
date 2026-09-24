@@ -14,6 +14,7 @@ nav:
   - Getting started:
       - Installation and quick start: getting-started.md
       - Common options and configuration: configuration.md
+      - Command reference: command.md
   - Annotation resources:
       - GeneBEDs: genebeds.md
       - FeatureBEDs: features.md
@@ -23,3 +24,4 @@ nav:
       - CGI: cgi.md
   - Selection and filtering:
       - Deduplication and selectors: deduplication.md
+  - Changelog: changelog.md

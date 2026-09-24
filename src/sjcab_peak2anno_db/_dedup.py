@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Mapping, Optional, Sequence, Tuple, Union
@@ -48,6 +49,7 @@ def dedup_gencode_bed(
     output_prefix: Optional[str] = None,
     gene_key: str = "symbol",
     promoter_down_bp: Optional[Union[int, str]] = None,
+    workers: int = 2,
 ) -> Mapping[str, Path]:
     """Keep one isoform per gene based on a selector file.
 
@@ -73,6 +75,7 @@ def dedup_gencode_bed(
         gene_key=gene_key,
         fallback_to_longest=True,
         default_prefix_kind="dedup",
+        workers=workers,
     )
 
 
@@ -89,6 +92,7 @@ def filter_gencode_bed(
     output_prefix: Optional[str] = None,
     gene_key: str = "symbol",
     promoter_down_bp: Optional[Union[int, str]] = None,
+    workers: int = 2,
 ) -> Mapping[str, Path]:
     """Keep one isoform per gene and omit genes with no selector support."""
 
@@ -107,6 +111,7 @@ def filter_gencode_bed(
         gene_key=gene_key,
         fallback_to_longest=False,
         default_prefix_kind="filter",
+        workers=workers,
     )
 
 
@@ -125,7 +130,10 @@ def _select_gencode_bed(
     gene_key: str,
     fallback_to_longest: bool,
     default_prefix_kind: str,
+    workers: int,
 ) -> Mapping[str, Path]:
+    if workers < 1:
+        raise ValueError("workers must be at least 1")
     selected_method = _normalize_method(method)
     key_mode = _normalize_gene_key(gene_key)
     gene_bed_path, resolved_species, resolved_version = _resolve_gene_bed(
@@ -186,8 +194,21 @@ def _select_gencode_bed(
 
     tss_output = output / "{}.tss.bed".format(prefix)
     tes_output = output / "{}.tes.bed".format(prefix)
-    write_tss(gene_output, tss_output)
-    write_tes(gene_output, tes_output)
+    derived_jobs = (
+        (write_tss, tss_output),
+        (write_tes, tes_output),
+    )
+    if workers > 1:
+        with ProcessPoolExecutor(max_workers=min(workers, len(derived_jobs))) as executor:
+            futures = [
+                executor.submit(function, gene_output, output_path)
+                for function, output_path in derived_jobs
+            ]
+            for future in futures:
+                future.result()
+    else:
+        for function, output_path in derived_jobs:
+            function(gene_output, output_path)
     return {"gene": gene_output, "tss": tss_output, "tes": tes_output}
 
 

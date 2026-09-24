@@ -77,6 +77,8 @@ Common option styles:
 - `-j`, `--processes N`: use `N` workers, one GTF per worker. GTF downloads are
   sequential with a short randomized pause; conversion within each worker is
   single-process. Default is `4`, capped at the CPUs allocated to the job.
+- `-n`, `--workers N`: on `dedup-bed` and `filter-bed`, use `N` workers for
+  independent TSS/TES annotation outputs. Default is `2`.
 - `-g`, `--gtf-path FILE`: use an existing local GTF instead of downloading
   one.
 - `-u`, `--url URL`: override the resolved GTF URL.

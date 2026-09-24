@@ -61,3 +61,18 @@
 ## 2026-09-14
 
 - Added automatic VCS-based development version metadata.
+
+## 2026-09-15
+
+- Updated release and conda publishing configuration for version `0.1.9`.
+
+## 2026-09-23
+
+- Added UTR FeatureBED ordering and restored the default install aliases.
+
+## 2026-09-24
+
+- Added coordinate sorting for packaged BED resources and generated GeneBED,
+  FeatureBED, TSS/TES, deduplicated, CGI, and blacklist outputs.
+- Added tests covering sorted interval generation and normalized packaged BED
+  resources.

@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Dict, Iterable, Mapping, Optional, Tuple, Union
 from urllib.error import HTTPError
 
-from ._derive import write_deduplong
+from ._derive import _sort_bed_file, write_deduplong
 from ._config import (
     clean_cache_files,
     configured_sizes_clean,
@@ -1220,6 +1220,7 @@ def convert_gencode_gtf_to_bed(
                 if line:
                     handle.write(line)
         tmp_path.replace(output)
+        _sort_bed_file(output)
     finally:
         if tmp_path.exists():
             tmp_path.unlink()

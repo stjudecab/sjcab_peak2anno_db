@@ -670,6 +670,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 inclusive=not args.exclusive,
                 output_prefix=args.prefix,
                 gene_key=args.gene_key,
+                workers=args.workers,
             )
             for name in sorted(targets):
                 print("{}\t{}".format(name, targets[name]))
@@ -900,6 +901,13 @@ def _add_dedup_filter_parser(
             "Use exact transcript ID matching for isoID/isoexp and require BED "
             "features to be fully contained in the promoter for peak/perover."
         ),
+    )
+    parser.add_argument(
+        "-n",
+        "--workers",
+        type=int,
+        default=2,
+        help="Workers for independent TSS/TES annotation outputs. Defaults to 2.",
     )
 
 

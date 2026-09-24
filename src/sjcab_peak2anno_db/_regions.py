@@ -19,7 +19,7 @@ from typing import Dict, Iterable, List, Mapping, Optional, Tuple, Union
 from ._download import ProgressCallback, report_progress
 from ._config import clean_cache_files, configured_sizes_clean, effective_processes
 from ._download_log import record_download_url
-from ._derive import _parse_bed_fields, _site_interval
+from ._derive import _parse_bed_fields, _site_interval, _sort_bed_file
 from ._gencode import (
     _ENSEMBL_SPECIES,
     _open_text,
@@ -2087,6 +2087,7 @@ def _write_merged_intervals(
                 for start, end in merged:
                     handle.write("{}\t{}\t{}\n".format(chrom, start, end))
         tmp_path.replace(output_path)
+        _sort_bed_file(output_path)
     finally:
         if tmp_path.exists():
             tmp_path.unlink()
@@ -2124,6 +2125,7 @@ def _write_intervals(
                 records_path.unlink()
                 genome_path.unlink()
                 tmp_path.replace(output_path)
+                _sort_bed_file(output_path)
                 return
             if backend == "pybedtools":
                 raise RuntimeError("pybedtools BED writer failed.")
@@ -2133,6 +2135,7 @@ def _write_intervals(
                 records_path.unlink()
                 genome_path.unlink()
                 tmp_path.replace(output_path)
+                _sort_bed_file(output_path)
                 return
             if backend == "bedtools":
                 raise RuntimeError("bedtools BED writer failed or is unavailable.")
@@ -2143,6 +2146,7 @@ def _write_intervals(
         records_path.unlink()
         genome_path.unlink()
         tmp_path.replace(output_path)
+        _sort_bed_file(output_path)
     finally:
         if records_path.exists():
             records_path.unlink()

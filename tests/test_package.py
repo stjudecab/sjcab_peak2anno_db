@@ -1742,7 +1742,7 @@ def test_write_gencode_region_unions_from_gtf(tmp_path):
     )
 
 
-def test_interval_writer_auto_backend_preserves_chromosome_order(tmp_path):
+def test_interval_writer_auto_backend_sorts_coordinates(tmp_path):
     intervals = {"chr2": [(4, 8)], "chr1": [(1, 3), (10, 12)]}
     chrom_order = ("chr2", "chr1")
 
@@ -1751,7 +1751,7 @@ def test_interval_writer_auto_backend_preserves_chromosome_order(tmp_path):
     regions._write_intervals(intervals, chrom_order, python_path, backend="python")
     regions._write_intervals(intervals, chrom_order, auto_path, backend="auto")
 
-    expected = "chr2\t4\t8\nchr1\t1\t3\nchr1\t10\t12\n"
+    expected = "chr1\t1\t3\nchr1\t10\t12\nchr2\t4\t8\n"
     assert python_path.read_text(encoding="utf-8") == expected
     assert auto_path.read_text(encoding="utf-8") == expected
 
@@ -2008,6 +2008,24 @@ def test_convert_gencode_gtf_to_bed_withtype(tmp_path):
     assert output.read_text(encoding="utf-8") == (
         "chr1\t100\t220\tGENE1\t40\t+\tENSG1.2\tENST1.3\t"
         "protein_coding\n"
+    )
+
+
+def test_sort_bed_file_orders_all_coordinates(tmp_path):
+    bed = tmp_path / "unsorted.bed"
+    bed.write_text(
+        "chr2\t20\t30\tB\t1\t+\n"
+        "chr1\t20\t30\tC\t1\t+\n"
+        "chr1\t10\t15\tA\t1\t+\n",
+        encoding="utf-8",
+    )
+
+    gencode._sort_bed_file(bed)
+
+    assert bed.read_text(encoding="utf-8") == (
+        "chr1\t10\t15\tA\t1\t+\n"
+        "chr1\t20\t30\tC\t1\t+\n"
+        "chr2\t20\t30\tB\t1\t+\n"
     )
 
 
@@ -2478,5 +2496,6 @@ def test_dedup_gencode_bed_cli_accepts_gene_bed(monkeypatch, tmp_path):
             "inclusive": False,
             "output_prefix": None,
             "gene_key": "symbol",
+            "workers": 2,
         },
     }

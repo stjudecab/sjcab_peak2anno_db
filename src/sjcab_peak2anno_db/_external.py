@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Iterable, Optional, Tuple, Union
 
 from ._download import ProgressCallback, download_file
+from ._derive import _sort_bed_file
 from ._download_log import record_download_url
 from ._registry import UnknownResourceError, data_root, user_data_dir
 
@@ -81,6 +82,7 @@ def install_blacklists(
             if versioned_path.exists() or versioned_path.is_symlink():
                 versioned_path.unlink()
             shutil.copyfile(source, versioned_path)
+        _sort_bed_file(versioned_path)
 
         _refresh_link(current_path, versioned_path.name, versioned_path)
 
@@ -111,6 +113,7 @@ def install_cgi(
         if destination.exists() and not overwrite:
             continue
         shutil.copyfile(source, destination)
+        _sort_bed_file(destination)
 
     return target_dir
 
@@ -145,6 +148,7 @@ def download_cgi(
 
         if overwrite or not bed_path.exists():
             _write_cgi_bed(raw_path, bed_path)
+        _sort_bed_file(bed_path)
 
     return target_dir
 
