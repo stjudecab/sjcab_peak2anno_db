@@ -10,6 +10,8 @@
   commented variables to the `#SJCAB_...` form.
 - Add aligned component-aware `list` output with a `source` column.
 - Store installed GeneBEDs under `genebed/` instead of `bed/`.
+- Record installed FeatureBED source GTF filenames in `installed.tsv` and show
+  them in `list feature`.
 
 ## 0.1.9
 

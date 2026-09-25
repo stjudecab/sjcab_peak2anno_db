@@ -23,6 +23,8 @@ sjcab-peak2anno-db list genebed # list all GeneBED resources
 sjcab-peak2anno-db list feature # list installed FeatureBED folders
 sjcab-peak2anno-db list blacklists # list bundled blacklist resources
 sjcab-peak2anno-db list cgi # list bundled CGI resources
+sjcab-peak2anno-db list chromhmm # list installed ChromHMM resources
+sjcab-peak2anno-db list segway # list installed Segway resources
 
 sjcab-peak2anno-db download-genebed hg38 v31 -o annotations # download Gencode hg38 v31 GeneBEDs to annotation folder
 sjcab-peak2anno-db install-genebed hg19 v31lift37 # install Gencode hg19 v31lift37 to --db-path
@@ -353,6 +355,10 @@ Default installed layout:
 {db-path}/feature/{species}/{version}/{prefix}/order.utr.lst
 {db-path}/feature/{species}/def -> {version}/{prefix}
 ```
+
+Feature installation records the source GTF basename in
+`{db-path}/installed.tsv` (`species`, `version`, and `gtf` columns). `list
+feature` uses this mapping for its `source` column.
 
 `order.lst` and `order.utr.lst` contain tab-separated rows with the BED
 filename, the feature name, and its full name:

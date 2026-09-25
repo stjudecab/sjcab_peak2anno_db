@@ -82,3 +82,5 @@
   blacklists, and CGI resources, including a `source` column.
 - Renamed the installed GeneBED directory from `bed` to `genebed` throughout
   the package, tests, and documentation.
+- Added `$DB_PATH/installed.tsv` to map installed feature species/version pairs
+  to their source GTF filenames; `list feature` now reports those filenames.

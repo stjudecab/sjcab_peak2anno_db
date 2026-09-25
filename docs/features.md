@@ -49,6 +49,10 @@ Main options:
 {db-path}/feature/{species}/def -> {version}/{prefix}
 ```
 
+Feature installation also records the source GTF basename in
+`{db-path}/installed.tsv` with `species`, `version`, and `gtf` columns. The
+`list feature` command uses this mapping for its `source` column.
+
 `order.lst` and `order.utr.lst` contain tab-separated rows with the BED
 filename, feature name, and full name. Both use this order: `Promoter.Up`,
 `5UTR`, `3UTR`, `Promoter.Down`, `Exon`, `Intron`, `TES`, `Dis5`, `Dis3`, and

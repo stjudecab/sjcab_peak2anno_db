@@ -47,6 +47,45 @@ DEFAULT_GENCODE_FEATURE_SPECS = (
     ("mm10", "vM22"),
     ("mm39", "vM39"),
 )
+INSTALLED_MAPPING_NAME = "installed.tsv"
+
+
+def read_installed_gtfs(data_dir: Optional[object] = None) -> dict:
+    """Read the installed species/version-to-GTF mapping."""
+
+    path = user_data_dir(data_dir) / INSTALLED_MAPPING_NAME
+    if not path.is_file():
+        return {}
+    mapping = {}
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return mapping
+    for line in lines:
+        fields = line.split("\t")
+        if len(fields) >= 3 and fields[0].lower() != "species":
+            mapping[(fields[0], fields[1])] = fields[2]
+    return mapping
+
+
+def _record_installed_gtfs(
+    data_dir: object,
+    specs: Iterable[Tuple[str, str]],
+    gtf_paths: Iterable[Path],
+    custom_name: Optional[str] = None,
+) -> None:
+    """Record the GTF basename used for each installed feature set."""
+
+    target_root = user_data_dir(data_dir)
+    mapping = read_installed_gtfs(target_root)
+    for (species, version), gtf_path in zip(specs, gtf_paths):
+        mapping[(custom_name or species, version)] = Path(gtf_path).name
+    mapping_path = target_root / INSTALLED_MAPPING_NAME
+    target_root.mkdir(parents=True, exist_ok=True)
+    with mapping_path.open("w", encoding="utf-8") as handle:
+        handle.write("species\tversion\tgtf\n")
+        for (species, version), gtf_name in sorted(mapping.items()):
+            handle.write("{}\t{}\t{}\n".format(species, version, gtf_name))
 
 
 def install_data(
@@ -241,6 +280,7 @@ def install_gencode_features(
         )
     else:
         gtf_paths = tuple(Path(gtf_path).expanduser() for _ in specs)
+    _record_installed_gtfs(target_root, specs, gtf_paths, custom_name=custom_name)
 
     jobs = []
     for (feature_species, feature_version), selected_gtf_path in zip(specs, gtf_paths):
@@ -528,7 +568,14 @@ def _feature_install_specs(
     species_value = ",".join(species) if not isinstance(species, str) else species
     specs = []
     for value, selected_version in parse_species_version_values(species_value, version):
-        if selected_version is None or str(selected_version).lower() == "all":
+        if selected_version is None or str(selected_version).strip().lower() in {
+            "",
+            "all",
+            "def",
+            "default",
+            "current",
+            "latest",
+        }:
             selected_version = default_version(value, "gene", "all")
         specs.append((value, selected_version))
     return tuple(specs)

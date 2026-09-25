@@ -32,6 +32,7 @@ from ._install import (
     install_data,
     install_gencode_beds,
     install_gencode_features,
+    read_installed_gtfs,
     update_data,
 )
 from ._regions import (
@@ -86,7 +87,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     list_parser.add_argument(
         "component",
         nargs="?",
-        choices=("def", "default", "genebed", "feature", "blacklists", "cgi"),
+        choices=(
+            "def",
+            "default",
+            "genebed",
+            "feature",
+            "blacklists",
+            "cgi",
+            "chromhmm",
+            "segway",
+        ),
         default="def",
         help="Resource group to list; default is def (the bundled GeneBED set).",
     )
@@ -1360,10 +1370,21 @@ def _gencode_feature_specs(species: str, version: Optional[str]) -> tuple:
     specs = parse_species_version_values(species, version)
     selected = []
     for feature_species, feature_version in specs:
-        if feature_version is None or feature_version.lower() == "all":
+        if _is_default_feature_version(feature_version):
             feature_version = _gencode_default_feature_version(feature_species)
         selected.append((feature_species, feature_version))
     return tuple(selected)
+
+
+def _is_default_feature_version(version: Optional[str]) -> bool:
+    return version is None or str(version).strip().lower() in {
+        "",
+        "all",
+        "def",
+        "default",
+        "current",
+        "latest",
+    }
 
 
 def _gencode_default_feature_version(species: str) -> str:
@@ -1444,6 +1465,7 @@ def _print_list(
             )
     elif component == "feature":
         root = user_data_dir() / "feature"
+        gtf_mapping = read_installed_gtfs()
         if root.is_dir():
             for species_dir in sorted(root.iterdir(), key=lambda path: path.name.lower()):
                 if not species_dir.is_dir():
@@ -1456,14 +1478,17 @@ def _print_list(
                     if not version_dir.is_dir():
                         continue
                     if version_dir.name == "def":
+                        mapped_version = version_dir.resolve().parent.name
                         rows.append(
                             _list_row(
                                 species_dir.name,
                                 "-",
                                 "def",
                                 version_dir,
-                                version_dir.name,
-                                root,
+                                gtf_mapping.get(
+                                    (species_dir.name, mapped_version), "-"
+                                ),
+                                root.parent,
                             )
                         )
                         continue
@@ -1477,8 +1502,10 @@ def _print_list(
                                     "-",
                                     version_dir.name,
                                     feature_dir,
-                                    feature_dir.name,
-                                    root,
+                                    gtf_mapping.get(
+                                        (species_dir.name, version_dir.name), "-"
+                                    ),
+                                    root.parent,
                                 )
                             )
     elif component in {"blacklists", "cgi"}:
@@ -1502,6 +1529,35 @@ def _print_list(
                     name,
                 )
             )
+    elif component in {"chromhmm", "segway"}:
+        root = chromhmm_root() if component == "chromhmm" else segway_root()
+        if root.is_dir():
+            for resource_path in sorted(
+                root.rglob("*"), key=lambda path: str(path).lower()
+            ):
+                if not resource_path.is_file() or resource_path.name.startswith("."):
+                    continue
+                if component == "chromhmm" and not resource_path.name.endswith(".bed.gz"):
+                    continue
+                if component == "segway" and not resource_path.name.endswith(
+                    (".bed", ".bed.gz", ".tab")
+                ):
+                    continue
+                relative = resource_path.relative_to(root)
+                resource_species = relative.parts[0] if relative.parts else "-"
+                if species is not None and resource_species.lower() != species.lower():
+                    continue
+                resource_version = relative.parts[1] if len(relative.parts) > 2 else "-"
+                rows.append(
+                    (
+                        resource_species,
+                        "-",
+                        resource_version,
+                        "no",
+                        str(resource_path.relative_to(root.parent)),
+                        resource_path.name,
+                    )
+                )
     _print_table(headers, rows)
 
 

@@ -111,6 +111,10 @@ def test_list_components_uses_aligned_columns_and_feature_folder_names(
     feature_dir = tmp_path / "feature" / "custom_species" / "116" / "2000bp"
     feature_dir.mkdir(parents=True)
     (feature_dir / "all.bed").write_text("chr1\t1\t2\n", encoding="utf-8")
+    (tmp_path / "installed.tsv").write_text(
+        "species\tversion\tgtf\ncustom_species\t116\tcustom.gtf.gz\n",
+        encoding="utf-8",
+    )
 
     cli._print_list("def", None, None)
     default_output = capsys.readouterr().out
@@ -121,6 +125,14 @@ def test_list_components_uses_aligned_columns_and_feature_folder_names(
     feature_output = capsys.readouterr().out
     assert "custom_species" in feature_output
     assert "2000bp" in feature_output
+    assert "feature/custom_species/116/2000bp" in feature_output
+    assert "custom.gtf.gz" in feature_output
+
+
+def test_install_feature_default_alias_resolves_species_default_version():
+    assert cli._gencode_feature_specs("mm10", "def") == (("mm10", "vM22"),)
+    assert cli._gencode_feature_specs("mm10", None) == (("mm10", "vM22"),)
+    assert install._feature_install_specs("mm10", "def") == (("mm10", "vM22"),)
 
 
 def _segway_interpreted_html():
