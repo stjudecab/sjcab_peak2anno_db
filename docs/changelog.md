@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Document the Segway database storage layout and metadata files.
+
 ## 0.2.0
 
 - Ensure packaged BED resources are sorted by chromosome, start, and end.

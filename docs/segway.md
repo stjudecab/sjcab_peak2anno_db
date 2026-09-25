@@ -14,6 +14,23 @@ Lifted files and the helper script are stored under the selected database
 directory. The script reuses an existing `segway-liftover` environment when
 available and caches chain files under `cache/chains`.
 
+## Storage layout
+
+With the default database path, Segway files are stored as:
+
+```text
+{db-path}/segway/{genome}/segway_encyclopedia.bed.gz
+{db-path}/segway/{genome}/caas.bed.gz
+{db-path}/segway/{genome}/{sample}.bed.gz
+{db-path}/segway/{genome}/metadata.tsv
+{db-path}/segway/segway_downloads.tsv
+```
+
+The default `{db-path}` is `~/.sjcab_peak2anno_db`; use `--db-path` or
+`SJCAB_PEAK2ANNO_DB_PATH` to change it. LiftOver output is written under
+`{db-path}/segway/{target-genome}/`, and generated scripts are stored as
+`{db-path}/segway/liftover_hg19_to_{target-genome}.sh`.
+
 ## Resource URLs
 
 - [ENCODE Segway software and download page](https://www.encodeproject.org/software/segway/)
