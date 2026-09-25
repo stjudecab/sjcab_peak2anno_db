@@ -10,8 +10,6 @@
 - Improve FeatureBED, GeneBED, deduplication, CLI, configuration, and resource
   documentation.
 
-## Unreleased
-
 ## 0.2.0
 
 - Ensure packaged BED resources are sorted by chromosome, start, and end.
