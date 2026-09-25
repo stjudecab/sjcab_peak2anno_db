@@ -22,11 +22,11 @@ sjcab-peak2anno-db install genebed feature blacklists cgi
 sjcab-peak2anno-db install -c genebed -c feature
 ```
 
-The supported install components are `genebed` (GeneBEDs), `feature`, blacklists, and
+The supported install components are `genebed`, `feature`, blacklists, and
 `cgi`. The three commands above install the complete default bundle. `list` shows
 the bundled registry, while `path` prints a resource path.
 
-## First downloaded resources
+## Download/install supported species/versions
 
 ```bash
 sjcab-peak2anno-db download-genebed hg38 v31 -o annotations
@@ -59,7 +59,8 @@ db.download_feature("hg38", "v31", "annotations")
 
 ## Data lookup and cache behavior
 
-Downloads first search the database cache, then the output directory, then the
+Downloads first search the database `{db-path}/cache`, then the output directory, then the
 current working directory. Download URLs are recorded in
-`{db-path}/download_urls.log`. GENCODE, UCSC, and Ensembl resolution details
+`{db-path}/download_urls.log`. Match of gtf file name and species/version listed in 
+`{db-path}/installed.tsv`. GENCODE, UCSC, and Ensembl resolution details
 are documented in the [GeneBEDs](genebeds.md) guide.
