@@ -61,3 +61,13 @@ filename, feature name, and full name. Both use this order: `Promoter.Up`,
 ```text
 {prefix}.tes.bed  TES  Transcription_End_Sites
 ```
+
+## GTF resolution URLs
+
+The resolver uses these sources when locating the GTF behind a FeatureBED set:
+
+- [GENCODE human releases](https://www.gencodegenes.org/human/releases.html)
+- [GENCODE mouse releases](https://www.gencodegenes.org/mouse/releases.html)
+- [Ensembl release and species catalogues](https://ftp.ebi.ac.uk/pub/ensembl/)
+- [Ensembl Genomes release and species catalogues](https://ftp.ebi.ac.uk/pub/ensemblgenomes/)
+- [UCSC goldenPath assemblies and GTFs](https://hgdownload.soe.ucsc.edu/goldenPath/)

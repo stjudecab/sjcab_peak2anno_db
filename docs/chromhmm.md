@@ -14,6 +14,20 @@ Use `--ids`/`-i`, `--tissue`/`-t`, and `--cellline`/`-c` to select records.
 Other UCSC builds use `--yes-liftover`; chain files are cached under
 `{db-path}/cache/chains/`.
 
+The generated database-level helper is `{db-path}/liftover_hg38_to.sh`:
+
+```bash
+bash liftover_hg38_to.sh
+bash liftover_hg38_to.sh mm10 crossmap
+bash liftover_hg38_to.sh mm10 ucsc
+```
+
+It scans the blacklist, CGI, ChromHMM, and Segway directories and skips files
+that already have lifted outputs. CrossMap is the default; `auto` tries
+CrossMap and then UCSC `liftOver`.
+The helper detects package managers in this order: Pixi, micromamba, mamba,
+then conda, and installs the required tool when it is unavailable.
+
 Output is stored under `{db-path}/chromhmm/{genome}` with a `metadata.tsv`
 index.
 

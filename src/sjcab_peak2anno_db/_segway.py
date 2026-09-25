@@ -279,13 +279,17 @@ def segway_liftover_script(
     input_dir: PathLike,
     output_dir: PathLike,
     target_genome: str,
-    env_name: str = "segway-liftover",
+    env_name: str = ".sjcab-liftover",
     install_root: Optional[PathLike] = None,
     cache_dir: Optional[PathLike] = None,
+    mode: str = "crossmap",
 ) -> str:
     """Return a bash script that lifts local hg19 Segway BEDs to another genome."""
 
     target = _normalize_target_genome(target_genome)
+    selected_mode = str(mode).strip().lower()
+    if selected_mode not in {"crossmap", "ucsc", "auto"}:
+        raise ValueError("mode must be crossmap, ucsc, or auto")
     chain_name = "hg19To{}.over.chain.gz".format(_ucsc_target_token(target))
     chain_url = urllib.parse.urljoin(SEGWAY_CHAIN_ROOT_URL, chain_name)
     chain_cache_dir = user_data_dir(cache_dir) / "cache" / "chains"
@@ -294,22 +298,34 @@ def segway_liftover_script(
         if install_root is not None
         else "''"
     )
+    output_root = Path(output_dir).expanduser().parent
     return """#!/usr/bin/env bash
 set -euo pipefail
 
 ENV_NAME={env_name}
 INPUT_DIR={input_dir}
-OUTPUT_DIR={output_dir}
+DEFAULT_TARGET={target}
+TARGET="${{1:-${{DEFAULT_TARGET}}}}"
+REQUESTED_MODE="${{2:-{mode}}}"
+OUTPUT_ROOT={output_root}
 INSTALL_ROOT={install_root}
 CHAIN_DIR={chain_dir}
-CHAIN="${{CHAIN_DIR}}/{chain_name}"
 TMP_DIR="${{TMPDIR:-/lustre_scratch/user_scratch/bxu2/TMPDIR/codex}}/sjcab-segway-liftover.$$"
 mkdir -p "${{TMP_DIR}}"
 trap 'rm -rf "${{TMP_DIR}}"' EXIT
 
+case "${{REQUESTED_MODE,,}}" in
+  crossmap|ucsc|auto) ;;
+  *) echo "Mode must be crossmap, ucsc, or auto: ${{REQUESTED_MODE}}" >&2; exit 2 ;;
+esac
+ucsc_token() {{ echo "${{1^}}"; }}
+CHAIN_NAME="hg19To$(ucsc_token "${{TARGET}}").over.chain.gz"
+CHAIN="${{CHAIN_DIR}}/${{CHAIN_NAME}}"
+CHAIN_URL="{chain_root}${{CHAIN_NAME}}"
+OUTPUT_DIR="${{OUTPUT_ROOT}}/${{TARGET}}"
 mkdir -p "${{CHAIN_DIR}}" "${{OUTPUT_DIR}}"
 if [ ! -s "${{CHAIN}}" ]; then
-  curl -L "{chain_url}" -o "${{CHAIN}}"
+  curl -L "${{CHAIN_URL}}" -o "${{CHAIN}}"
 fi
 
 activate_existing_env() {{
@@ -317,14 +333,6 @@ activate_existing_env() {{
     hook="$(micromamba shell hook -s bash 2>/dev/null)" && eval "${{hook}}"
     if micromamba activate "${{ENV_NAME}}" >/dev/null 2>&1; then
       echo "Activated existing micromamba environment: ${{ENV_NAME}}" >&2
-      return 0
-    fi
-  fi
-
-  if command -v conda >/dev/null 2>&1; then
-    hook="$(conda shell.bash hook 2>/dev/null)" && eval "${{hook}}"
-    if conda activate "${{ENV_NAME}}" >/dev/null 2>&1; then
-      echo "Activated existing conda environment: ${{ENV_NAME}}" >&2
       return 0
     fi
   fi
@@ -337,26 +345,34 @@ activate_existing_env() {{
     fi
   fi
 
+  if command -v conda >/dev/null 2>&1; then
+    hook="$(conda shell.bash hook 2>/dev/null)" && eval "${{hook}}"
+    if conda activate "${{ENV_NAME}}" >/dev/null 2>&1; then
+      echo "Activated existing conda environment: ${{ENV_NAME}}" >&2
+      return 0
+    fi
+  fi
+
   return 1
 }}
 
 create_and_activate_env() {{
   if command -v micromamba >/dev/null 2>&1; then
-    if micromamba create -y -n "${{ENV_NAME}}" bioconda::ucsc-liftover; then
+    if micromamba create -y -n "${{ENV_NAME}}" -c conda-forge -c bioconda crossmap; then
       eval "$(micromamba shell hook -s bash)"
       micromamba activate "${{ENV_NAME}}"
       return 0
     fi
-    micromamba create -y -n "${{ENV_NAME}}" -c conda-forge -c bioconda crossmap
+    micromamba create -y -n "${{ENV_NAME}}" bioconda::ucsc-liftover
     eval "$(micromamba shell hook -s bash)"
     micromamba activate "${{ENV_NAME}}"
   elif command -v mamba >/dev/null 2>&1; then
-    if mamba create -y -n "${{ENV_NAME}}" bioconda::ucsc-liftover; then
+    if mamba create -y -n "${{ENV_NAME}}" -c conda-forge -c bioconda crossmap; then
       eval "$(mamba shell hook -s bash)"
       mamba activate "${{ENV_NAME}}"
       return 0
     fi
-    mamba create -y -n "${{ENV_NAME}}" -c conda-forge -c bioconda crossmap
+    mamba create -y -n "${{ENV_NAME}}" bioconda::ucsc-liftover
     if command -v conda >/dev/null 2>&1; then
       eval "$(conda shell.bash hook)"
       conda activate "${{ENV_NAME}}"
@@ -365,12 +381,12 @@ create_and_activate_env() {{
       mamba activate "${{ENV_NAME}}"
     fi
   elif command -v conda >/dev/null 2>&1; then
-    if conda create -y -n "${{ENV_NAME}}" bioconda::ucsc-liftover; then
+    if conda create -y -n "${{ENV_NAME}}" -c conda-forge -c bioconda crossmap; then
       eval "$(conda shell.bash hook)"
       conda activate "${{ENV_NAME}}"
       return 0
     fi
-    conda create -y -n "${{ENV_NAME}}" -c conda-forge -c bioconda crossmap
+    conda create -y -n "${{ENV_NAME}}" bioconda::ucsc-liftover
     eval "$(conda shell.bash hook)"
     conda activate "${{ENV_NAME}}"
   else
@@ -379,27 +395,38 @@ create_and_activate_env() {{
   fi
 }}
 
-if ! activate_existing_env; then
+if command -v pixi >/dev/null 2>&1; then
+  PIXI_MODE=1
+elif ! activate_existing_env; then
   create_and_activate_env
 fi
 
-if command -v liftOver >/dev/null 2>&1; then
-  LIFTOVER=(liftOver)
-  LIFTOVER_MODE=ucsc
-elif command -v CrossMap >/dev/null 2>&1; then
-  CROSSMAP=(CrossMap)
-  LIFTOVER_MODE=crossmap
-elif command -v CrossMap.py >/dev/null 2>&1; then
-  CROSSMAP=(CrossMap.py)
-  LIFTOVER_MODE=crossmap
-else
+if [ "${{PIXI_MODE:-0}}" = 1 ]; then
+  LIFTOVER_MODE=pixi
+elif [ "${{REQUESTED_MODE,,}}" = "crossmap" ] || [ "${{REQUESTED_MODE,,}}" = "auto" ]; then
+  if command -v CrossMap >/dev/null 2>&1; then
+    CROSSMAP=(CrossMap); LIFTOVER_MODE=crossmap
+  elif command -v CrossMap.py >/dev/null 2>&1; then
+    CROSSMAP=(CrossMap.py); LIFTOVER_MODE=crossmap
+  fi
+fi
+if [ -z "${{LIFTOVER_MODE:-}}" ] && {{ [ "${{REQUESTED_MODE,,}}" = "ucsc" ] || [ "${{REQUESTED_MODE,,}}" = "auto" ]; }} && command -v liftOver >/dev/null 2>&1; then
+  LIFTOVER=(liftOver); LIFTOVER_MODE=ucsc
+fi
+if [ -z "${{LIFTOVER_MODE:-}}" ]; then
   echo "liftOver and CrossMap are not available in conda environment ${{ENV_NAME}}." >&2
   echo "Install it there manually or remove the env so this script can recreate it." >&2
   exit 1
 fi
 
 run_liftover() {{
-  if [ "${{LIFTOVER_MODE}}" = "ucsc" ]; then
+  if [ "${{LIFTOVER_MODE}}" = "pixi" ]; then
+    if [ "${{REQUESTED_MODE,,}}" = "ucsc" ]; then
+      pixi exec --channel conda-forge --channel bioconda --spec ucsc-liftover liftOver "$@"
+    else
+      pixi exec --channel conda-forge --channel bioconda --spec crossmap CrossMap bed "$@"
+    fi
+  elif [ "${{LIFTOVER_MODE}}" = "ucsc" ]; then
     "${{LIFTOVER[@]}}" "$@"
   else
     "${{CROSSMAP[@]}}" bed "$@"
@@ -409,7 +436,7 @@ run_liftover() {{
 for bed in "${{INPUT_DIR}}"/*.bed.gz "${{INPUT_DIR}}"/interpreted/*.bed.gz; do
   [ -e "${{bed}}" ] || continue
   rel="$(basename "${{bed}}")"
-  out="${{OUTPUT_DIR}}/${{rel%.bed.gz}}.{target}lift.bed"
+    out="${{OUTPUT_DIR}}/${{rel%.bed.gz}}.${{TARGET}}lift.bed"
   if [ -s "${{out}}.gz" ]; then
     echo "Skipping existing lifted file: ${{out}}.gz" >&2
     continue
@@ -426,7 +453,7 @@ for bed in "${{INPUT_DIR}}"/*.bed.gz "${{INPUT_DIR}}"/interpreted/*.bed.gz; do
 done
 
 if [ -n "${{INSTALL_ROOT}}" ]; then
-  INSTALL_DIR="${{INSTALL_ROOT}}/{target}"
+  INSTALL_DIR="${{INSTALL_ROOT}}/${{TARGET}}"
   mkdir -p "${{INSTALL_DIR}}"
   for lifted in "${{OUTPUT_DIR}}"/*.bed.gz "${{OUTPUT_DIR}}"/*.unmap; do
     [ -e "${{lifted}}" ] || continue
@@ -441,13 +468,15 @@ else
 fi
 """.format(
         chain_name=chain_name,
-        chain_url=chain_url,
+        chain_root=SEGWAY_CHAIN_ROOT_URL,
         chain_dir=_shell_quote(str(chain_cache_dir)),
         env_name=_shell_quote(env_name),
         input_dir=_shell_quote(str(Path(input_dir).expanduser())),
         install_root=install_root_text,
         output_dir=_shell_quote(str(Path(output_dir).expanduser())),
+        output_root=_shell_quote(str(output_root)),
         target=target,
+        mode=selected_mode,
     )
 
 
@@ -456,6 +485,7 @@ def write_segway_liftover_script(
     target_genome: str = "hg38",
     script_path: Optional[PathLike] = None,
     install_root: Optional[PathLike] = None,
+    mode: str = "crossmap",
 ) -> Path:
     """Write a Segway hg19 liftover helper script and return its path."""
 
@@ -474,6 +504,7 @@ def write_segway_liftover_script(
         target,
         install_root=install_root,
         cache_dir=data_dir,
+        mode=mode,
     )
     output = Path(script_path).expanduser()
     output.parent.mkdir(parents=True, exist_ok=True)

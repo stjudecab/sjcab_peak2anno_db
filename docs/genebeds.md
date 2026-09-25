@@ -49,3 +49,13 @@ sjcab-peak2anno-db download-genebed mm10 vM22 \
 Use `--gene-type` repeatedly to restrict GENCODE types. See
 [FeatureBEDs](features.md) for derived regions and
 [Deduplication](deduplication.md) for transcript selection.
+
+## GTF resolution URLs
+
+The resolver checks these sources for the GTF associated with a GeneBED:
+
+- [GENCODE human releases](https://www.gencodegenes.org/human/releases.html)
+- [GENCODE mouse releases](https://www.gencodegenes.org/mouse/releases.html)
+- [Ensembl release and species catalogues](https://ftp.ebi.ac.uk/pub/ensembl/)
+- [Ensembl Genomes release and species catalogues](https://ftp.ebi.ac.uk/pub/ensemblgenomes/)
+- [UCSC goldenPath assemblies and GTFs](https://hgdownload.soe.ucsc.edu/goldenPath/)

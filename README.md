@@ -83,7 +83,7 @@ Common option styles:
 - `-j`, `--processes N`: use `N` workers, one GTF per worker. GTF downloads are
   sequential with a short randomized pause; conversion within each worker is
   single-process. Default is `4`, capped at the CPUs allocated to the job.
-- `-n`, `--workers N`: on `dedup-bed` and `filter-bed`, use `N` workers for
+- `-n`, `--workers N`: on `dedup-genebed` and `filter-genebed`, use `N` workers for
   independent TSS/TES annotation outputs. Default is `2`.
 - `-g`, `--gtf-path FILE`: use an existing local GTF instead of downloading
   one.
@@ -97,8 +97,8 @@ Common option styles:
 
 If no RC file exists, the default XDG RC template is created automatically;
 all settings in the generated template are commented out. Existing RC files
-are completed with any missing commented settings; commented configuration
-variables use `#SJCAB_...` with no space after `#`.
+are left unchanged; commented configuration variables use `#SJCAB_...` with
+no space after `#`.
 RC files are read from `~/.sjcab_peak2anno.rc` and
 `$XDG_CONFIG_HOME/sjcab_peak2anno/.sjcab_peak2anno.rc` (the XDG file takes
 precedence). Set `SJCAB_PEAK2ANNO_CONFIG` to add a specific RC file; that file
@@ -220,17 +220,17 @@ db.write_tes("all.gene.bed", "all.tes.bed")
 db.write_deduplong("all.gene.bed", "deduplong.gene.bed")
 ```
 
-### `dedup-bed` / `filter-bed`
+### `dedup-genebed` / `filter-genebed`
 
 Both commands select one isoform per gene from an all-isoform GENCODE BED and
 write `{prefix}.gene.bed`, `{prefix}.tss.bed`, and `{prefix}.tes.bed`.
 
-`dedup-bed` falls back to the longest isoform for genes without selector
+`dedup-genebed` falls back to the longest isoform for genes without selector
 support (each gene from original would have at least one transcript).
-`filter-bed` uses the same selector logic but omits genes without selector
+`filter-genebed` uses the same selector logic but omits genes without selector
  support (could remove a lot genes without supports).
 
-The default `dedup-bed` selector is `longcol5`: it selects the isoform
+The default `dedup-genebed` selector is `longcol5`: it selects the isoform
 with the largest numeric BED column 5. Use `long` to select by interval length
 (`end - start`):
 
@@ -239,23 +239,23 @@ Detailed selector input examples, including input and output BED content, are in
 
 ```bash
 # Select one transcript per gene using the default column-5 selector.
-sjcab-peak2anno-db dedup-bed hg38 v31 -b all.gene.bed -o annotations
+sjcab-peak2anno-db dedup-genebed hg38 v31 -b all.gene.bed -o annotations
 # Select one transcript per gene using genomic interval length.
-sjcab-peak2anno-db dedup-bed hg38 v31 -m long -b all.gene.bed -o annotations
+sjcab-peak2anno-db dedup-genebed hg38 v31 -m long -b all.gene.bed -o annotations
 # Select transcripts using peak scores around their TSS.
-sjcab-peak2anno-db dedup-bed hg38 v31 -m peak -i h3k4me3_peaks.bed -o annotations
+sjcab-peak2anno-db dedup-genebed hg38 v31 -m peak -i h3k4me3_peaks.bed -o annotations
 # Select transcript IDs explicitly.
-sjcab-peak2anno-db dedup-bed mm10 vM22 -m isoID -i isoforms.txt -K ensid -o annotations
+sjcab-peak2anno-db dedup-genebed mm10 vM22 -m isoID -i isoforms.txt -K ensid -o annotations
 # Keep genes whose promoters overlap the selector file.
-sjcab-peak2anno-db filter-bed -b annotations/genebed/hg38/v31/all.gene.bed -m perover -i active_chromhmm.bed -o annotations
+sjcab-peak2anno-db filter-genebed -b annotations/genebed/hg38/v31/all.gene.bed -m perover -i active_chromhmm.bed -o annotations
 # Select by expression and require exact selector matches.
-sjcab-peak2anno-db filter-bed hg38 v31 -m isoexp -i isoform_expression.tsv --exclusive -o annotations
+sjcab-peak2anno-db filter-genebed hg38 v31 -m isoexp -i isoform_expression.tsv --exclusive -o annotations
 ```
 
 Deduplicate Selector methods:
 
 - `longcol5`: no selector is needed; select the isoform with the largest
-  numeric value in BED column 5. This is the default for `dedup-bed`.
+  numeric value in BED column 5. This is the default for `dedup-genebed`.
 - `long`: no selector is needed; select the isoform with the largest `end - start`.
 - `peak`: selector is a peak BED file with peak score in column 5; the isoform
   whose TSS +/- promoter window has the highest peak score is selected. Text
@@ -598,10 +598,10 @@ sjcab-peak2anno-db install --overwrite
 sjcab-peak2anno-db install-genebed
 sjcab-peak2anno-db download-genebed hg38 v31 -o annotations
 sjcab-peak2anno-db download-genebed mm10 vM22 -g gencode.vM22.annotation.gtf.gz -o annotations
-sjcab-peak2anno-db dedup-bed hg38 v31 -m peak -i h3k4me3_peaks.bed -o annotations
-sjcab-peak2anno-db dedup-bed mm10 vM22 -m isoID -i isoforms.txt -K ensid -o annotations
-sjcab-peak2anno-db filter-bed -b annotations/genebed/hg38/v31/all.gene.bed -m perover -i active_chromhmm.bed -o annotations
-sjcab-peak2anno-db filter-bed hg38 v31 -m isoexp -i isoform_expression.tsv --exclusive -o annotations
+sjcab-peak2anno-db dedup-genebed hg38 v31 -m peak -i h3k4me3_peaks.bed -o annotations
+sjcab-peak2anno-db dedup-genebed mm10 vM22 -m isoID -i isoforms.txt -K ensid -o annotations
+sjcab-peak2anno-db filter-genebed -b annotations/genebed/hg38/v31/all.gene.bed -m perover -i active_chromhmm.bed -o annotations
+sjcab-peak2anno-db filter-genebed hg38 v31 -m isoexp -i isoform_expression.tsv --exclusive -o annotations
 
 sjcab-peak2anno-db install-feature all all
 sjcab-peak2anno-db install-feature hg38 v31 -o feature_downloads

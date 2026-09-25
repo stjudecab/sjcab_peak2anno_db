@@ -1,7 +1,7 @@
 # Deduplicate Selection methods:
 
 - `longcol5`: no selector is needed; select the isoform with the largest
-  numeric value in BED column 5. This is the default for `dedup-bed`.
+  numeric value in BED column 5. This is the default for `dedup-genebed`.
 - `long`: no selector is needed; select the isoform with the largest `end - start`.
 - `peak`: selector is a peak BED file with peak score in column 5; the isoform
   whose TSS +/- promoter window has the highest peak score is selected. Text
@@ -75,7 +75,7 @@ chr1    800    900    GENE2    100    -    ENSG2    ENST3
 
 ## `longcol5`
 
-The default `dedup-bed` selector. It keeps the row with the largest numeric
+The default `dedup-genebed` selector. It keeps the row with the largest numeric
 value in BED column 5 for each gene.
 
 ```text
@@ -86,7 +86,7 @@ chr1    800    900    GENE2    100    -    ENSG2    ENST3
 
 ```bash
 # Keep the largest value in BED column 5 for each gene.
-sjcab-peak2anno-db dedup-bed hg38 v31 -m longcol5 -b genes.bed -o .
+sjcab-peak2anno-db dedup-genebed hg38 v31 -m longcol5 -b genes.bed -o .
 ```
 
 Output:
@@ -109,7 +109,7 @@ chr1    800    900    GENE2    100    -    ENSG2    ENST3
 
 ```bash
 # Keep the longest genomic interval for each gene.
-sjcab-peak2anno-db dedup-bed hg38 v31 -m long -b genes.bed -o .
+sjcab-peak2anno-db dedup-genebed hg38 v31 -m long -b genes.bed -o .
 ```
 
 Output:
@@ -141,7 +141,7 @@ chr1_505_515 50
 
 ```bash
 # Select the transcript whose promoter overlaps the highest-score peak.
-sjcab-peak2anno-db dedup-bed hg38 v31 -m peak -p 20 -b genes.bed -i peaks.txt -o .
+sjcab-peak2anno-db dedup-genebed hg38 v31 -m peak -p 20 -b genes.bed -i peaks.txt -o .
 ```
 
 Output:
@@ -173,7 +173,7 @@ chr1/500/590
 
 ```bash
 # Select the transcript with the greatest selector overlap.
-sjcab-peak2anno-db filter-bed -m perover -p 20 -b genes.bed -i active.txt -o .
+sjcab-peak2anno-db filter-genebed -m perover -p 20 -b genes.bed -i active.txt -o .
 ```
 
 Output:
@@ -184,7 +184,7 @@ chr1    500    600    GENE1    100    +    ENSG1    ENST2
 
 ## `isoID`
 
-The selector is a transcript ID list. `dedup-bed` falls back to the longest
+The selector is a transcript ID list. `dedup-genebed` falls back to the longest
 row for genes without a match.
 
 ```text
@@ -194,7 +194,7 @@ ENST3
 
 ```bash
 # Keep the transcript IDs listed in ids.txt.
-sjcab-peak2anno-db dedup-bed hg38 v31 -m isoID -b genes.bed -i ids.txt -o .
+sjcab-peak2anno-db dedup-genebed hg38 v31 -m isoID -b genes.bed -i ids.txt -o .
 ```
 
 Output:
@@ -218,7 +218,7 @@ ENST3            1.0
 
 ```bash
 # Keep the highest-expression transcript for each gene.
-sjcab-peak2anno-db dedup-bed hg38 v31 -m isoexp -b genes.bed -i expression.tsv -o .
+sjcab-peak2anno-db dedup-genebed hg38 v31 -m isoexp -b genes.bed -i expression.tsv -o .
 ```
 
 Output:

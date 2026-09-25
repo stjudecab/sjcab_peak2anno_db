@@ -5,21 +5,27 @@ to `--db-path`; `download-*` commands write to `--output-dir`.
 
 ## Common options
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `SPECIES`, `-s`, `--species` | command-specific | Species or genome assembly. |
-| `VERSION`, `-v`, `--ver` | `def` where supported | Release or version. |
-| `-d`, `--db-path DIR` | `~/.sjcab_peak2anno_db` | Database/cache directory. |
-| `-o`, `--output-dir DIR` | `.` for download commands | Download or generated-file directory. |
-| `-name NAME` | unset | Custom installed species name. |
-| `-n`, `--workers N` | `2` for `dedup-bed`/`filter-bed` | Parallel independent TSS/TES output writers. |
-| `-j`, `--processes N` | `4` | Independent GTF workers for install/download feature commands. |
-| `-g`, `--gtf-path FILE` | unset | Use an existing local GTF. |
-| `-u`, `--url URL` | resolved URL | Override the GTF URL. |
-| `--ucsc-source {ens,refseq}` | `ens` | UCSC gene-table source. |
-| `--clean-cache [DAYS]` | `90` when configured | Remove old cache files after generation. |
-| `--sizes-clean [0|1]` | `1` | Create `.sizes.clean` files. |
-| `-dry-run` | off | Resolve URLs without downloading where supported. |
+<div style="overflow-x:auto">
+<table>
+<colgroup><col style="min-width: 330px"><col style="min-width: 170px"><col style="min-width: 480px"></colgroup>
+<thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td style="white-space:nowrap"><code>SPECIES</code>, <code>-s</code>, <code>--species</code></td><td>command-specific</td><td>Species or genome assembly.</td></tr>
+<tr><td style="white-space:nowrap"><code>VERSION</code>, <code>-v</code>, <code>--ver</code></td><td><code>def</code> where supported</td><td>Release or version.</td></tr>
+<tr><td style="white-space:nowrap"><code>-d</code>, <code>--db-path DIR</code></td><td><code>~/.sjcab_peak2anno_db</code></td><td>Database/cache directory.</td></tr>
+<tr><td style="white-space:nowrap"><code>-o</code>, <code>--output-dir DIR</code></td><td><code>.</code> for download commands</td><td>Download or generated-file directory.</td></tr>
+<tr><td style="white-space:nowrap"><code>-name NAME</code></td><td>unset</td><td>Custom installed species name.</td></tr>
+<tr><td style="white-space:nowrap"><code>-n</code>, <code>--workers N</code></td><td><code>2</code> for selector commands</td><td>Parallel independent TSS/TES output writers.</td></tr>
+<tr><td style="white-space:nowrap"><code>-j</code>, <code>--processes N</code></td><td><code>4</code></td><td>Independent GTF workers for install/download feature commands.</td></tr>
+<tr><td style="white-space:nowrap"><code>-g</code>, <code>--gtf-path FILE</code></td><td>unset</td><td>Use an existing local GTF.</td></tr>
+<tr><td style="white-space:nowrap"><code>-u</code>, <code>--url URL</code></td><td>resolved URL</td><td>Override the GTF URL.</td></tr>
+<tr><td style="white-space:nowrap"><code>--ucsc-source {ens,refseq}</code></td><td><code>ens</code></td><td>UCSC gene-table source.</td></tr>
+<tr><td style="white-space:nowrap"><code>--clean-cache [DAYS]</code></td><td><code>90</code> when configured</td><td>Remove old cache files after generation.</td></tr>
+<tr><td style="white-space:nowrap"><code>--sizes-clean [0|1]</code></td><td><code>1</code></td><td>Create <code>.sizes.clean</code> files.</td></tr>
+<tr><td style="white-space:nowrap"><code>-dry-run</code></td><td>off</td><td>Resolve URLs without downloading where supported.</td></tr>
+</tbody>
+</table>
+</div>
 
 `-n/--workers` is intentionally separate from `-j/--processes`: workers apply
 to the independent left/right-style TSS/TES outputs produced by the selector
@@ -50,17 +56,23 @@ The default overwrite behavior is off; use `--overwrite` to regenerate files.
 | `--no-overwrite`, `-n` | off; existing files may be regenerated |
 | `--processes`, `-j` | `4` |
 
-## `dedup-bed` and `filter-bed`
+## `dedup-genebed`, `filter-genebed`, `dedup-feature`, and `filter-feature`
 
 | Option | Default |
 | --- | --- |
-| `--method`, `-m` | `longcol5` for `dedup-bed`; required for `filter-bed` |
+| `--method`, `-m` | `longcol5` for `dedup-genebed`; required for `filter-genebed` |
 | `--promoter-bp`, `-p` | `2kb` |
 | `--promoter-down` | same as `--promoter-bp` |
 | `--gene-key`, `-K` | `symbol` |
 | `--workers`, `-n` | `2` |
 | `--exclusive` | off; inclusive matching is used |
 | `--output-dir`, `-o` | `.` |
+
+`dedup-feature` and `filter-feature` accept the same selector options as their
+`*-bed` counterparts. They retain transcript IDs using the GeneBED selection
+and regenerate FeatureBEDs from only those transcripts. `dedup-feature` falls
+back to the longest transcript; `filter-feature` omits genes without selector
+support.
 
 ## Other commands
 

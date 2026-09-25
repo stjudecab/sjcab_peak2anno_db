@@ -1,8 +1,8 @@
 # Segway
 
 Segway downloads the hg19 encyclopedia and can create a liftOver script for
-another UCSC assembly. Generated scripts try the UCSC `liftOver` binary from
-the `bioconda::ucsc-liftover` package first and fall back to CrossMap.
+another UCSC assembly. Generated scripts prefer CrossMap and can explicitly
+select CrossMap or UCSC `liftOver`.
 
 ```bash
 sjcab-peak2anno-db install-segway
@@ -28,8 +28,12 @@ With the default database path, Segway files are stored as:
 
 The default `{db-path}` is `~/.sjcab_peak2anno_db`; use `--db-path` or
 `SJCAB_PEAK2ANNO_DB_PATH` to change it. LiftOver output is written under
-`{db-path}/segway/{target-genome}/`, and generated scripts are stored as
-`{db-path}/segway/liftover_hg19_to_{target-genome}.sh`.
+`{db-path}/segway/{target-genome}/`. The shared helper is
+`{db-path}/liftover_hg38_to.sh`; it accepts an optional target and mode, for
+example `bash liftover_hg38_to.sh mm10 ucsc`, and scans all supported resource
+folders while skipping existing lifted files.
+It detects Pixi, micromamba, mamba, and conda in that order and installs the
+required CrossMap or UCSC liftOver package when needed.
 
 ## Resource URLs
 

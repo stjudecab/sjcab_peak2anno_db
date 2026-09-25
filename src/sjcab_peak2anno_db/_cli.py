@@ -11,7 +11,12 @@ from typing import Optional, Sequence
 
 from ._chromhmm import CHROMHMM_GENOMES, chromhmm_root, download_chromhmm
 from ._config import parse_species_version_values
-from ._dedup import dedup_gencode_bed, filter_gencode_bed
+from ._dedup import (
+    dedup_gencode_bed,
+    dedup_gencode_feature,
+    filter_gencode_bed,
+    filter_gencode_feature,
+)
 from ._external import (
     CGI_SPECIES,
     download_cgi,
@@ -49,13 +54,8 @@ from ._registry import (
     path,
     user_data_dir,
 )
-from ._segway import (
-    download_segway,
-    install_segway,
-    segway_root,
-    write_segway_liftover_script,
-)
-from ._liftover import write_liftover_script
+from ._segway import download_segway, install_segway, segway_root
+from ._liftover import resource_liftover_script
 
 _ANNOTATION_CHOICES = ANNOTATION_TYPES + ("deduplong",)
 _INSTALL_DEFAULT_ALIASES = ("def", "default")
@@ -310,13 +310,23 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     _add_dedup_filter_parser(
         subparsers,
-        "dedup-bed",
+        "dedup-genebed",
         "Select one isoform per gene and fall back to longest when unselected.",
     )
     _add_dedup_filter_parser(
         subparsers,
-        "filter-bed",
+        "filter-genebed",
         "Select one isoform per gene and omit genes without selector support.",
+    )
+    _add_dedup_filter_parser(
+        subparsers,
+        "dedup-feature",
+        "Generate FeatureBEDs from one selected isoform per gene.",
+    )
+    _add_dedup_filter_parser(
+        subparsers,
+        "filter-feature",
+        "Generate FeatureBEDs from genes with selector-supported isoforms.",
     )
 
     blacklist_parser = subparsers.add_parser(
@@ -675,11 +685,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     else:
                         print("{}\t{}".format(name, targets[name]))
             return 0
-        if args.command in {"dedup-bed", "filter-bed"}:
+        if args.command in {
+            "dedup-genebed", "filter-genebed", "dedup-feature", "filter-feature"
+        }:
             function = (
                 dedup_gencode_bed
-                if args.command == "dedup-bed"
+                if args.command == "dedup-genebed"
                 else filter_gencode_bed
+                if args.command == "filter-genebed"
+                else dedup_gencode_feature
+                if args.command == "dedup-feature"
+                else filter_gencode_feature
             )
             targets = function(
                 args.method,
@@ -726,17 +742,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 print("{}\t{}".format(eid, targets[eid]))
             if source_genome != requested_genome:
                 root = chromhmm_root(chromhmm_data_dir)
-                source_dir = root / source_genome / "{}state".format(args.model)
-                output_dir = root / ".liftover" / requested_genome / "{}state".format(args.model)
-                script = write_liftover_script(
-                    source_dir, output_dir, source_genome, requested_genome,
-                    root / "liftover_{}_to_{}.sh".format(source_genome, requested_genome),
-                    install_root=(
-                        root / requested_genome / "{}state".format(args.model)
-                        if args.command == "install-chromhmm"
-                        else None
-                    ),
-                    cache_dir=root.parent,
+                script = resource_liftover_script(
+                    root.parent,
+                    target_genome=requested_genome,
+                    script_path=root.parent / "liftover_hg38_to.sh",
+                    mode="crossmap",
                 )
                 print("liftover_script\t{}".format(script))
             return 0
@@ -777,14 +787,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 progress=_stderr_progress,
             )
             if requested_genome.lower() != "hg19":
-                liftover_script = write_segway_liftover_script(
-                    data_dir=segway_data_dir,
+                resource_root = segway_root(segway_data_dir).parent
+                liftover_script = resource_liftover_script(
+                    resource_root,
                     target_genome=requested_genome,
-                    install_root=(
-                        segway_root(segway_data_dir)
-                        if args.command == "install-segway"
-                        else None
-                    ),
+                    script_path=resource_root / "liftover_hg38_to.sh",
+                    mode="crossmap",
                 )
             for name in sorted(targets):
                 print("{}\t{}".format(name, targets[name]))
@@ -869,7 +877,7 @@ def _add_dedup_filter_parser(
         help="Input all-isoform GeneBED. Overrides species/version lookup.",
     )
     method_help = "Selection method: longcol5, long, peak, isoID, isoexp, or perover."
-    if name == "dedup-bed":
+    if name in {"dedup-genebed", "dedup-feature"}:
         parser.add_argument("-m", "--method", default="longcol5", help=method_help)
     else:
         parser.add_argument("-m", "--method", required=True, help=method_help)
@@ -883,7 +891,11 @@ def _add_dedup_filter_parser(
         "-o",
         "--output-dir",
         default=".",
-        help="Directory for generated gene/tss/tes BED files.",
+        help=(
+            "Directory for generated FeatureBED files."
+            if name.endswith("-feature")
+            else "Directory for generated gene/tss/tes BED files."
+        ),
     )
     parser.add_argument(
         "-d",
@@ -931,7 +943,11 @@ def _add_dedup_filter_parser(
         "--workers",
         type=int,
         default=2,
-        help="Workers for independent TSS/TES annotation outputs. Defaults to 2.",
+        help=(
+            "Workers for independent feature outputs. Defaults to 2."
+            if name.endswith("-feature")
+            else "Workers for independent TSS/TES annotation outputs. Defaults to 2."
+        ),
     )
 
 
@@ -1243,7 +1259,7 @@ def _write_external_liftover_scripts(
     target_genomes: Sequence[str],
     yes_liftover: bool,
 ) -> None:
-    """Write hg38-to-target helpers for resources absent from the package."""
+    """Write one database-level hg38-to-target helper for all resources."""
 
     for target_genome in target_genomes:
         if not yes_liftover and not _confirm_generic_liftover(
@@ -1255,16 +1271,12 @@ def _write_external_liftover_scripts(
                     target_genome, resource_name
                 )
             )
-        output_dir = source_dir / ".liftover" / target_genome
-        script = write_liftover_script(
-            source_dir,
-            output_dir,
-            "hg38",
-            target_genome,
-            source_dir / "liftover_hg38_to_{}.sh".format(target_genome),
-            install_root=source_dir,
-            rename_genome_prefix=resource_name in {"blacklists", "cgi"},
-            cache_dir=source_dir.parent,
+        root = source_dir.parent
+        script = resource_liftover_script(
+            root,
+            target_genome=target_genome,
+            script_path=root / "liftover_hg38_to.sh",
+            mode="crossmap",
         )
         print("liftover_script\t{}".format(script))
 
@@ -1478,20 +1490,8 @@ def _print_list(
                     if not version_dir.is_dir():
                         continue
                     if version_dir.name == "def":
-                        mapped_version = version_dir.resolve().parent.name
-                        rows.append(
-                            _list_row(
-                                species_dir.name,
-                                "-",
-                                "def",
-                                version_dir,
-                                gtf_mapping.get(
-                                    (species_dir.name, mapped_version), "-"
-                                ),
-                                root.parent,
-                            )
-                        )
                         continue
+                    default_path = (species_dir / "def").resolve()
                     for feature_dir in sorted(
                         version_dir.iterdir(), key=lambda path: path.name.lower()
                     ):
@@ -1506,6 +1506,7 @@ def _print_list(
                                         (species_dir.name, version_dir.name), "-"
                                     ),
                                     root.parent,
+                                    is_default=feature_dir.resolve() == default_path,
                                 )
                             )
     elif component in {"blacklists", "cgi"}:
@@ -1568,12 +1569,13 @@ def _list_row(
     path: Path,
     source: str,
     root: Path,
+    is_default: bool = False,
 ) -> tuple:
     return (
         species,
         isoform_set,
         version,
-        "yes" if version == "def" else "no",
+        "yes" if is_default else "no",
         str(path.relative_to(root)),
         source,
     )

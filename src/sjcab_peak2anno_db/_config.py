@@ -195,7 +195,6 @@ def _config_paths() -> Tuple[Path, ...]:
         os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))
     ).expanduser()
     xdg = xdg_root / "sjcab_peak2anno" / ".sjcab_peak2anno.rc"
-    _migrate_legacy_default_xdg_config(xdg)
     explicit = os.environ.get("SJCAB_PEAK2ANNO_CONFIG")
     paths = [path for path in (home, xdg) if path.is_file()]
     if explicit:
@@ -206,9 +205,6 @@ def _config_paths() -> Tuple[Path, ...]:
         _create_default_xdg_config(xdg)
         if xdg.is_file():
             paths.append(xdg)
-    else:
-        for path in paths:
-            _ensure_rc_variables(path)
     # An explicitly selected file is the highest-precedence RC file.
     return tuple(paths)
 

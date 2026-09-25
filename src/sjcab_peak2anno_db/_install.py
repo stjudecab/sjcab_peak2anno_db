@@ -50,6 +50,25 @@ DEFAULT_GENCODE_FEATURE_SPECS = (
 INSTALLED_MAPPING_NAME = "installed.tsv"
 
 
+def _remove_install_locks(
+    data_dir: object,
+    species: str,
+    version: Optional[str] = None,
+) -> None:
+    """Remove completed-install lock markers without touching active locks."""
+
+    lock_dir = user_data_dir(data_dir) / ".locks"
+    names = {"{}-def.lock".format(species)}
+    if version:
+        names.add("{}-{}.lock".format(species, version))
+    for name in names:
+        lock_path = lock_dir / name
+        try:
+            lock_path.unlink()
+        except FileNotFoundError:
+            continue
+
+
 def read_installed_gtfs(data_dir: Optional[object] = None) -> dict:
     """Read the installed species/version-to-GTF mapping."""
 
@@ -409,6 +428,7 @@ def install_gencode_feature_set(
                 feature_dir
             ),
         )
+        _remove_install_locks(target_root, species, version)
         return feature_dir
 
     selected_gene_bed = (
@@ -506,6 +526,7 @@ def install_gencode_feature_set(
             species_dir / "def"
         ),
     )
+    _remove_install_locks(target_root, species, version)
     return feature_dir
 
 

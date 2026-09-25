@@ -2532,7 +2532,7 @@ def test_dedup_gencode_bed_cli_accepts_gene_bed(monkeypatch, tmp_path):
     assert (
         cli.main(
             [
-                "dedup-bed",
+                "dedup-genebed",
                 "-b",
                 str(gene_bed),
                 "-m",

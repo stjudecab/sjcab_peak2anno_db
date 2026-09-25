@@ -10,8 +10,10 @@ from ._dedup import (
     DEDUP_METHODS,
     dedup_bed,
     dedup_gencode_bed,
+    dedup_gencode_feature,
     filter_bed,
     filter_gencode_bed,
+    filter_gencode_feature,
 )
 from ._chromhmm import (
     CHROMHMM_GENOMES,
@@ -60,7 +62,11 @@ from ._install import (
     update_data,
 )
 from ._config import UserConfig, load_config
-from ._liftover import liftover_script, write_liftover_script
+from ._liftover import (
+    liftover_script,
+    resource_liftover_script,
+    write_liftover_script,
+)
 from ._regions import (
     GENCODE_FEATURE_LIST_ORDER,
     REGION_TYPES,
@@ -163,8 +169,10 @@ __all__ = [
     "download_segway",
     "dedup_bed",
     "dedup_gencode_bed",
+    "dedup_gencode_feature",
     "filter_bed",
     "filter_gencode_bed",
+    "filter_gencode_feature",
     "gencode_bed_dir",
     "gencode_bed_filename",
     "gencode_feature_prefix",
@@ -178,6 +186,7 @@ __all__ = [
     "install_gencode_beds",
     "install_gencode_features",
     "liftover_script",
+    "resource_liftover_script",
     "install_segway",
     "installed_path",
     "iter_blacklists",

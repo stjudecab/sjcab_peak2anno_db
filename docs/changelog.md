@@ -1,8 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.3
 
-- Document the Segway database storage layout and metadata files.
+- Add liftover troubleshooting and shared resource-script documentation.
+- Add blacklist and CGI CrossMap/UCSC liftOver overlap comparisons for hg19
+  and mm10, including unmerged, `merge -d 100`, and `merge -d 200` results.
+- Report both native-truth recall and liftover prediction-side PPV, with
+  confidence warnings for fragmented and low-recovery mappings.
+- Improve FeatureBED, GeneBED, deduplication, CLI, configuration, and resource
+  documentation.
+
+## Unreleased
 
 ## 0.2.0
 

@@ -9,18 +9,22 @@ description = "Gene-backed peak-to-annotation BED resources for SJ/CAB workflows
 readme = "README.md"
 requires-python = ">=3.7"
 authors = [
-  { name = "SJ/CAB" }
+  {name = "St. Jude CAB"}
 ]
+keywords = ["bioinformatics", "genomics", "BED", "peak annotation"]
 classifiers = [
   "Development Status :: 3 - Alpha",
+  "Environment :: Console",
   "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.7",
+  "Programming Language :: Python :: 3.8",
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
-  "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
   "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
@@ -29,6 +33,7 @@ classifiers = [
 Homepage = "https://github.com/stjudecab/sjcab_peak2anno_db"
 Repository = "https://github.com/stjudecab/sjcab_peak2anno_db"
 Issues = "https://github.com/stjudecab/sjcab_peak2anno_db/issues"
+Doc = "https://sjcab-peak2anno-db.readthedocs.io"
 
 [project.scripts]
 peak2anno_db = "sjcab_peak2anno_db._cli:main"
@@ -36,9 +41,8 @@ peak2anno-db = "sjcab_peak2anno_db._cli:main"
 sjcab-peak2anno-db = "sjcab_peak2anno_db._cli:main"
 sjcab_peak2anno_db = "sjcab_peak2anno_db._cli:main"
 
-[tool.setuptools]
-package-dir = { "" = "src" }
-include-package-data = true
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.versioningit]
 default-version = "0.0.0"
@@ -53,8 +57,9 @@ distance-dirty = "{base_version}"
 file = "src/sjcab_peak2anno_db/_generated_version.py"
 template = '__version__ = "{version}"'
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = true
 
 [tool.setuptools.package-data]
 sjcab_peak2anno_db = [

@@ -21,7 +21,7 @@
   within each worker is single-process. The default is `4`, capped at the CPUs
   allocated to the current job.
 - `-n`, `--workers N`: workers for independent TSS/TES outputs from
-  `dedup-bed` and `filter-bed`. The default is `2`.
+  `dedup-genebed` and `filter-genebed`. The default is `2`.
 - `-g`, `--gtf-path`: use a local GTF.
 - `-u`, `--url`: override the resolved GTF URL.
 - `--ucsc-source {ens,refseq}`: choose the UCSC gene table.
@@ -39,8 +39,8 @@ The generated configuration template is searched in this order:
 2. `$XDG_CONFIG_HOME/sjcab_peak2anno/.sjcab_peak2anno.rc`;
 3. `~/.sjcab_peak2anno.rc`.
 
-If the XDG file does not exist, a fully commented template is created. Existing
-RC files are completed with any missing commented settings. Commented
+If no RC file exists, a fully commented template is created under the XDG
+configuration path. Existing RC files are left unchanged. Commented
 configuration variables use `#SJCAB_...` with no space after `#`. RC keys use
 the same names as environment variables. The environment prefix is
 `SJCAB_PEAK2ANNO_DB_`.

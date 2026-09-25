@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import os
 import re
+import tempfile
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import Iterable, List, Mapping, Optional, Sequence, Set, Tuple, Union
 
 from ._derive import _length, _parse_bed_fields, _site_interval, write_tes, write_tss
 from ._config import (
@@ -17,6 +18,9 @@ from ._config import (
 )
 from ._registry import default_version as registry_default_version
 from ._registry import path as registry_path
+from ._registry import user_data_dir
+from ._gencode import _open_text, _parse_attributes
+from ._regions import write_legacy_gencode_feature_unions
 
 PathLike = Union[str, os.PathLike]
 
@@ -113,6 +117,203 @@ def filter_gencode_bed(
         default_prefix_kind="filter",
         workers=workers,
     )
+
+
+def dedup_gencode_feature(
+    method: str = "longcol5",
+    selector: Optional[PathLike] = None,
+    output_dir: PathLike = ".",
+    gene_bed: Optional[PathLike] = None,
+    species: Optional[str] = None,
+    version: Optional[str] = "default",
+    data_dir: Optional[PathLike] = None,
+    promoter_bp: Union[int, str] = 2000,
+    inclusive: bool = True,
+    output_prefix: Optional[str] = None,
+    gene_key: str = "symbol",
+    promoter_down_bp: Optional[Union[int, str]] = None,
+    workers: int = 2,
+) -> Mapping[str, Path]:
+    """Generate FeatureBEDs from the transcripts retained by deduplication."""
+
+    return _select_gencode_feature(
+        method=method,
+        selector=selector,
+        output_dir=output_dir,
+        gene_bed=gene_bed,
+        species=species,
+        version=version,
+        data_dir=data_dir,
+        promoter_bp=promoter_bp,
+        promoter_down_bp=promoter_down_bp,
+        inclusive=inclusive,
+        output_prefix=output_prefix,
+        gene_key=gene_key,
+        fallback_to_longest=True,
+    )
+
+
+def filter_gencode_feature(
+    method: str,
+    selector: Optional[PathLike] = None,
+    output_dir: PathLike = ".",
+    gene_bed: Optional[PathLike] = None,
+    species: Optional[str] = None,
+    version: Optional[str] = "default",
+    data_dir: Optional[PathLike] = None,
+    promoter_bp: Union[int, str] = 2000,
+    inclusive: bool = True,
+    output_prefix: Optional[str] = None,
+    gene_key: str = "symbol",
+    promoter_down_bp: Optional[Union[int, str]] = None,
+    workers: int = 2,
+) -> Mapping[str, Path]:
+    """Generate FeatureBEDs from transcripts retained by feature filtering."""
+
+    return _select_gencode_feature(
+        method=method,
+        selector=selector,
+        output_dir=output_dir,
+        gene_bed=gene_bed,
+        species=species,
+        version=version,
+        data_dir=data_dir,
+        promoter_bp=promoter_bp,
+        promoter_down_bp=promoter_down_bp,
+        inclusive=inclusive,
+        output_prefix=output_prefix,
+        gene_key=gene_key,
+        fallback_to_longest=False,
+    )
+
+
+def _select_gencode_feature(
+    method: str,
+    selector: Optional[PathLike],
+    output_dir: PathLike,
+    gene_bed: Optional[PathLike],
+    species: Optional[str],
+    version: Optional[str],
+    data_dir: Optional[PathLike],
+    promoter_bp: Union[int, str],
+    promoter_down_bp: Optional[Union[int, str]],
+    inclusive: bool,
+    output_prefix: Optional[str],
+    gene_key: str,
+    fallback_to_longest: bool,
+) -> Mapping[str, Path]:
+    """Select GeneBED records, then regenerate FeatureBEDs for their transcripts."""
+
+    with tempfile.TemporaryDirectory(prefix="sjcab-feature-") as temporary:
+        selected = _select_gencode_bed(
+            method=method,
+            selector=selector,
+            output_dir=temporary,
+            gene_bed=gene_bed,
+            species=species,
+            version=version,
+            data_dir=data_dir,
+            promoter_bp=promoter_bp,
+            promoter_down_bp=promoter_down_bp,
+            inclusive=inclusive,
+            output_prefix="selected",
+            gene_key=gene_key,
+            fallback_to_longest=fallback_to_longest,
+            default_prefix_kind="dedup" if fallback_to_longest else "filter",
+            workers=1,
+        )
+        selected_gene = selected["gene"]
+        _, resolved_species, resolved_version = _resolve_gene_bed(
+            gene_bed, species, version, data_dir
+        )
+        resolved_species = resolved_species or species
+        if resolved_version in {None, "default", "def", "latest"} and resolved_species:
+            resolved_version = registry_default_version(
+                resolved_species, "gene", "all"
+            )
+        gtf_path = _resolve_feature_gtf(
+            resolved_species,
+            resolved_version,
+            data_dir,
+        )
+        transcript_ids = {
+            record.transcript_id_base or _strip_version(record.transcript_id)
+            for record in _read_gene_bed(selected_gene, gene_key)
+        }
+        filtered_gtf = Path(temporary) / "selected.gtf"
+        _write_transcript_filtered_gtf(gtf_path, transcript_ids, filtered_gtf)
+        prefix = output_prefix or _feature_output_prefix(
+            resolved_species, resolved_version, fallback_to_longest, method
+        )
+        return write_legacy_gencode_feature_unions(
+            selected_gene,
+            filtered_gtf,
+            output_dir,
+            promoter_bp=promoter_bp,
+            promoter_down_bp=promoter_down_bp,
+            prefix=prefix,
+        )
+
+
+def _resolve_feature_gtf(
+    species: Optional[str],
+    version: Optional[str],
+    data_dir: Optional[PathLike],
+) -> Path:
+    if not species:
+        raise ValueError("Feature selection requires species or an installed GTF mapping.")
+    root = user_data_dir(data_dir)
+    mapping_path = root / "installed.tsv"
+    names = []
+    if mapping_path.is_file():
+        for line in mapping_path.read_text(encoding="utf-8").splitlines()[1:]:
+            fields = line.split("\t")
+            if len(fields) < 3:
+                continue
+            if fields[0].casefold() == species.casefold() and (
+                not version or fields[1].casefold() == str(version).casefold()
+            ):
+                names.append(fields[2])
+    for name in dict.fromkeys(names):
+        direct = root / name
+        if direct.is_file():
+            return direct
+        matches = sorted(root.rglob(name))
+        if matches:
+            return matches[0]
+    raise FileNotFoundError(
+        "No source GTF found for {} {}. Run install-feature first or provide the source GTF in the database cache.".format(
+            species, version or ""
+        )
+    )
+
+
+def _write_transcript_filtered_gtf(
+    source: PathLike,
+    transcript_ids: Set[str],
+    target: Path,
+) -> None:
+    with target.open("w", encoding="utf-8") as output, _open_text(source) as handle:
+        for line in handle:
+            if line.startswith("#"):
+                output.write(line)
+                continue
+            fields = line.rstrip("\n").split("\t")
+            if len(fields) < 9:
+                continue
+            transcript_id = _parse_attributes(fields[8]).get("transcript_id", "")
+            if _strip_version(transcript_id) in transcript_ids:
+                output.write(line)
+
+
+def _feature_output_prefix(
+    species: Optional[str],
+    version: Optional[str],
+    dedup: bool,
+    method: str,
+) -> str:
+    base = "{}.{}".format(species or "feature", version or "default")
+    return "{}.{}feature{}".format(base, "dedup" if dedup else "filter", method)
 
 
 def _select_gencode_bed(

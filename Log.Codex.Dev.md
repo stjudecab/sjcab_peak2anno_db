@@ -86,3 +86,14 @@
   to their source GTF filenames; `list feature` now reports those filenames.
 - Prepared the `0.2.0` release after pulling the latest `main` changes.
 - Documented Segway resource, metadata, liftOver, and script storage paths.
+
+## 2026-09-25
+
+- Fixed UCSC liftOver argument order and short/invalid BED score handling by
+  padding temporary BED12 records and restoring original columns.
+- Added shared-resource liftover validation for BED3 and decimal-score CGI
+  records, including Pixi UCSC execution paths.
+- Compared CrossMap and UCSC liftOver blacklist/CGI outputs against native
+  hg19 and mm10 references with no merge, `merge -d 100`, and `merge -d 200`.
+- Documented native-truth recall and liftover prediction-side PPV/FP results
+  and confidence limitations in the blacklist and CGI documentation.
