@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.0
+
 - Ensure packaged BED resources are sorted by chromosome, start, and end.
 - Sort generated GeneBED, FeatureBED, TSS/TES, deduplicated, CGI, and
   blacklist outputs regardless of the selected interval-writing backend.

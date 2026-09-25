@@ -84,3 +84,4 @@
   the package, tests, and documentation.
 - Added `$DB_PATH/installed.tsv` to map installed feature species/version pairs
   to their source GTF filenames; `list feature` now reports those filenames.
+- Prepared the `0.2.0` release after pulling the latest `main` changes.
